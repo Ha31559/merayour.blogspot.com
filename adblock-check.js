@@ -120,7 +120,7 @@
         <div style="font-size: 50px; margin-bottom: 15px;">🛡️</div>
         <h2 style="color: #ff3b30; margin: 0 0 12px 0; font-size: 22px; font-weight: 700;">AdBlocker Detected!</h2>
         <p style="font-size: 14px; color: #a0a0ab; line-height: 1.6; margin-bottom: 25px;">
-          हमारी वेबसाइट की सामग्री आपके लिए मुफ़्त है। इसे चालू रखने के लिए हम विज्ञापनों पर निर्भर हैं। कृपया अपने ब्राउज़र से AdBlocker को बंद (Disable) करें और पेज को रीफ्रेश करें।
+          Our content is free for everyone. We rely on ads to keep this site running. Please disable your AdBlocker and refresh the page to support us.
         </p>
         <button onclick="window.location.reload()" style="background: #ff3b30; color: #ffffff; border: none; padding: 12px 28px; font-size: 15px; font-weight: 600; border-radius: 8px; cursor: pointer; width: 100%; box-shadow: 0 4px 12px rgba(255,59,48,0.3);">
           पेज Refresh करें
