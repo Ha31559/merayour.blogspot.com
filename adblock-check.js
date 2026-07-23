@@ -123,7 +123,7 @@
           Our content is free for everyone. We rely on ads to keep this site running. Please disable your AdBlocker and refresh the page to support us.
         </p>
         <button onclick="window.location.reload()" style="background: #ff3b30; color: #ffffff; border: none; padding: 12px 28px; font-size: 15px; font-weight: 600; border-radius: 8px; cursor: pointer; width: 100%; box-shadow: 0 4px 12px rgba(255,59,48,0.3);">
-          पेज Refresh करें
+          Reload Page
         </button>
       </div>
     `;
