@@ -1,7 +1,7 @@
 (function (global) {
   // --- 1. Multi-Signal Scoring Configuration ---
   let totalScore = 0;
-  const THRESHOLD = 70; // 60 या उससे ज़्यादा स्कोर होने पर ही Adblocker माना जाएगा
+  const THRESHOLD = 50; // 60 या उससे ज़्यादा स्कोर होने पर ही Adblocker माना जाएगा
 
   // --- 2. Multiple DOM Bait Probe ---
   function testDomElements() {
