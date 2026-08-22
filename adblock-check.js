@@ -2,7 +2,7 @@
     "use strict";
 
     // ==========================================
-    // ⚙️ CUSTOMIZATION CONFIGURATION (Unchanged)
+    // ⚙️ CUSTOMIZATION CONFIGURATION
     // ==========================================
     const CONFIG = {
         logoUrl: "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUFWy8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666", 
@@ -10,7 +10,14 @@
         message: "merayour made possible by the support of our readers. To keep our stories free for everyone, please continue reading on a standard browser without active content blockers."
     };
 
-    // 1. Full-page overlay injector (CSS + DOM)
+    // 🌐 [VERSION 2] Global Error Interceptor (Catches network-level script blocks in Soul/Brave)
+    window.addEventListener("error", function (e) {
+        if (e && e.target && (e.target.src || "").match(/googlesyndication|googletagmanager|google-analytics/i)) {
+            lockPage();
+        }
+    }, true);
+
+    // 🔒 Full-page overlay injector (CSS + DOM with Broken Image Handler)
     function lockPage() {
         if (document.getElementById("ag-lock-overlay")) return;
 
@@ -72,7 +79,7 @@
         overlay.id = "ag-lock-overlay";
         
         const logoHTML = CONFIG.logoUrl 
-            ? `<img src="${CONFIG.logoUrl}" alt="Logo" class="ag-logo" />` 
+            ? `<img src="${CONFIG.logoUrl}" alt="Logo" class="ag-logo" onerror="this.style.display='none'" />` 
             : "";
 
         overlay.innerHTML = `
@@ -86,17 +93,20 @@
         (document.body || document.documentElement).appendChild(overlay);
     }
 
-    // 🆕 UPGRADE 1: Invisible HoneyTrap Element Generator
+    // 🪤 [VERSION 1 & 3] Invisible HoneyTrap & Cosmetic Filter Hiding Detector
     function createBaitTrap() {
-        if (document.getElementById("adsbygoogle-bait")) return;
-        const bait = document.createElement("div");
-        bait.id = "adsbygoogle-bait";
-        bait.className = "adsbygoogle ad-banner ad-unit google-ad";
-        bait.style.cssText = "width: 1px !important; height: 1px !important; position: absolute !important; left: -9999px !important; top: -9999px !important;";
-        (document.body || document.documentElement).appendChild(bait);
+        let bait = document.getElementById("adsbygoogle-bait");
+        if (!bait) {
+            bait = document.createElement("div");
+            bait.id = "adsbygoogle-bait";
+            bait.className = "adsbygoogle ad-banner ad-unit google-ad pub_300x250";
+            bait.style.cssText = "width: 1px !important; height: 1px !important; position: absolute !important; left: -9999px !important; top: -9999px !important; opacity: 0.01 !important;";
+            (document.body || document.documentElement).appendChild(bait);
+        }
+        return bait;
     }
 
-    // 🆕 UPGRADE 2: Real AdSense IFRAME Size Inspector
+    // 📦 [VERSION 1] Real AdSense IFRAME Size Inspector
     function isRealAdSenseBlocked() {
         const adContainers = document.querySelectorAll('.adsbygoogle');
         if (adContainers.length > 0) {
@@ -115,26 +125,32 @@
         return false;
     }
 
-    // 2. Combined Deep Check System
-    async function checkAnalytics() {
-        // --- Layer A: Bait Trap Check ---
-        createBaitTrap();
-        const bait = document.getElementById("adsbygoogle-bait");
+    // 🚀 [ALL VERSIONS COMBINED] Comprehensive Deep Check System
+    async function runAllChecks() {
+        // 1. Check Bait & Cosmetic Hiding (EasyList/ABP filters)
+        const bait = createBaitTrap();
         if (bait) {
             const style = window.getComputedStyle(bait);
-            if (style.display === "none" || style.visibility === "hidden" || bait.offsetHeight === 0) {
+            const rect = bait.getBoundingClientRect();
+            if (
+                style.display === "none" || 
+                style.visibility === "hidden" || 
+                style.opacity === "0" || 
+                style.height === "0px" || 
+                rect.height === 0
+            ) {
                 lockPage();
                 return;
             }
         }
 
-        // --- Layer B: Real AdSense IFRAME Check ---
+        // 2. Check Real AdSense IFRAMEs
         if (isRealAdSenseBlocked()) {
             lockPage();
             return;
         }
 
-        // --- Layer C: Global Objects & Spoofing Inspection ---
+        // 3. Check Google Analytics & Global Objects (शुरुआत वाला ओरिजिनल लॉजिक)
         const isGtagAvailable = typeof window.gtag === "function";
         const isRealTagLoaded = typeof window.google_tag_data !== "undefined";
         const isAdblockLoaded = typeof window.adsbygoogle === "undefined" || (window.adsbygoogle && window.adsbygoogle.loaded === false);
@@ -144,7 +160,7 @@
             return;
         }
 
-        // --- Layer D: AdSense Network Ping ---
+        // 4. Network Ping Check (AdSense ping)
         try {
             await fetch("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", {
                 method: "HEAD",
@@ -156,15 +172,15 @@
         }
     }
 
-    // 3. JavaScript Heartbeat
-    function startHeartbeat() {
-        checkAnalytics();
-        setInterval(checkAnalytics, 1500);
+    // 💓 Continuous Heartbeat & Scanner
+    function initSystem() {
+        runAllChecks();
+        setInterval(runAllChecks, 1500); // हर 1.5 सेकंड में पूरी जर्नी के सारे चेक्स दोहराए जाएंगे
     }
 
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", startHeartbeat);
+        document.addEventListener("DOMContentLoaded", initSystem);
     } else {
-        startHeartbeat();
+        initSystem();
     }
 })();
