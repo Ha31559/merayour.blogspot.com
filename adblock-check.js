@@ -86,21 +86,49 @@
         (document.body || document.documentElement).appendChild(overlay);
     }
 
-    // 2. Real Network Ping + Ad-Blocker Dual Check
+    // 2. Firefox & uBlock Proof Trap Generator
+    function createBaitElement() {
+        if (document.getElementById("adsbygoogle-bait")) return;
+
+        const bait = document.createElement("div");
+        bait.id = "adsbygoogle-bait";
+        bait.className = "adsbygoogle ad-banner ad-unit google-ad";
+        bait.style.cssText = "width: 1px !important; height: 1px !important; position: absolute !important; left: -9999px !important; top: -9999px !important;";
+        
+        (document.body || document.documentElement).appendChild(bait);
+    }
+
+    // 3. Multi-Layer Anti-Adblock Engine
     async function checkAnalytics() {
-        // Signal A: Google Analytics basic check
+        createBaitElement();
+
+        // Check 1: Bait Element CSS Check (uBlock/Firefox Cosmetic Filter Trap)
+        const bait = document.getElementById("adsbygoogle-bait");
+        let isBaitBlocked = false;
+
+        if (bait) {
+            const computedStyle = window.getComputedStyle(bait);
+            if (
+                computedStyle.display === "none" || 
+                computedStyle.visibility === "hidden" || 
+                computedStyle.height === "0px" ||
+                bait.offsetHeight === 0
+            ) {
+                isBaitBlocked = true;
+            }
+        }
+
+        // Check 2: Global Object Integrity Check
         const isGtagAvailable = typeof window.gtag === "function";
         const isRealTagLoaded = typeof window.google_tag_data !== "undefined";
-
-        // Signal B: AdSense / Ads script block check (Defeats uBlock/Ghostery EasyList)
         const isAdblockLoaded = typeof window.adsbygoogle === "undefined" || (window.adsbygoogle && window.adsbygoogle.loaded === false);
 
-        if (!isGtagAvailable || !isRealTagLoaded || isAdblockLoaded) {
+        if (isBaitBlocked || !isGtagAvailable || !isRealTagLoaded || isAdblockLoaded) {
             lockPage();
             return;
         }
 
-        // Signal C: Network Ping Catching
+        // Check 3: Network Layer Ping
         try {
             await fetch("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", {
                 method: "HEAD",
@@ -112,7 +140,7 @@
         }
     }
 
-    // 3. JavaScript Heartbeat
+    // 4. Heartbeat Runner
     function startHeartbeat() {
         checkAnalytics();
         setInterval(checkAnalytics, 1500);
