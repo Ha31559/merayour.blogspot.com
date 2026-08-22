@@ -5,13 +5,8 @@
     // ⚙️ CUSTOMIZATION CONFIGURATION
     // ==========================================
     const CONFIG = {
-        // अपने ब्लॉग के लोगो का URL यहाँ डालें (अगर नहीं चाहिए तो इसे खाली "" रहने दें)
         logoUrl: "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUFWy8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666", 
-        
-        // मुख्य टाइटल (Heading)
         title: "Hey Buddy!",
-        
-        // यूज़र के लिए मैसेज (Notice Text)
         message: "merayour made possible by the support of our readers. To keep our stories free for everyone, please continue reading on a standard browser without active content blockers."
     };
 
@@ -76,7 +71,6 @@
         const overlay = document.createElement("div");
         overlay.id = "ag-lock-overlay";
         
-        // Logo HTML logic
         const logoHTML = CONFIG.logoUrl 
             ? `<img src="${CONFIG.logoUrl}" alt="Logo" class="ag-logo" />` 
             : "";
@@ -92,23 +86,23 @@
         (document.body || document.documentElement).appendChild(overlay);
     }
 
-    // 2. Real Network Ping Check (Includes Fake Stubbing & Anti-Spoof Detection)
+    // 2. Real Network Ping + Ad-Blocker Dual Check
     async function checkAnalytics() {
-        // Test 1: Function check
+        // Signal A: Google Analytics basic check
         const isGtagAvailable = typeof window.gtag === "function";
-
-        // Test 2 (Firefox Upgrade): Check if real Google script instantiated window.google_tag_data
-        // uBlock Origin and Firefox surrogate scripts create a fake gtag() but CANNOT generate this object
         const isRealTagLoaded = typeof window.google_tag_data !== "undefined";
 
-        if (!isGtagAvailable || !isRealTagLoaded) {
+        // Signal B: AdSense / Ads script block check (Defeats uBlock/Ghostery EasyList)
+        const isAdblockLoaded = typeof window.adsbygoogle === "undefined" || (window.adsbygoogle && window.adsbygoogle.loaded === false);
+
+        if (!isGtagAvailable || !isRealTagLoaded || isAdblockLoaded) {
             lockPage();
             return;
         }
 
-        // Test 3: Network Ping Check
+        // Signal C: Network Ping Catching
         try {
-            await fetch("https://www.google-analytics.com/g/collect", {
+            await fetch("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", {
                 method: "HEAD",
                 mode: "no-cors",
                 cache: "no-store"
