@@ -167,6 +167,31 @@ if (isOperaBlocking || isPixelBlocked) {
             lockPage();
             return;
         }
+        // 🛡️ 1. Dynamic AdSense Frame Render Check (iframe Render Detection)
+        const activeAdIns = document.querySelector("ins.adsbygoogle");
+        if (activeAdIns) {
+            const hasIframe = activeAdIns.querySelector("iframe");
+            const isUnfilled = activeAdIns.getAttribute("data-ad-status") === "unfilled";
+            if (!hasIframe || isUnfilled) {
+                lockPage();
+                return;
+            }
+        }
+
+        // 🛡️ 2. Shadow DOM & Script Element Interception (Brave / Soul Deep Blocker)
+        if (window.google_ad_client === undefined && document.querySelector(".adsbygoogle")) {
+            lockPage();
+            return;
+        }
+
+        // 🛡️ 3. Execution Delay Verification (Detect Silent JS Pausing)
+        const startCheck = performance.now();
+        for (let i = 0; i < 1000; i++) { Math.sqrt(i); }
+        const endCheck = performance.now();
+        if (endCheck - startCheck > 500) { // If browser aggressively throttled script
+            lockPage();
+            return;
+        }
 
         // 1. Check Bait & Cosmetic Hiding (EasyList/ABP filters)
         const bait = createBaitTrap();
