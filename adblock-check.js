@@ -2,7 +2,7 @@
     "use strict";
 
     // ==========================================
-    // ⚙️ CUSTOMIZATION CONFIGURATION
+    // ⚙️ CUSTOMIZATION CONFIGURATION (Unchanged)
     // ==========================================
     const CONFIG = {
         logoUrl: "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUFWy8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666", 
@@ -86,49 +86,65 @@
         (document.body || document.documentElement).appendChild(overlay);
     }
 
-    // 2. Firefox & uBlock Proof Trap Generator
-    function createBaitElement() {
+    // 🆕 UPGRADE 1: Invisible HoneyTrap Element Generator
+    function createBaitTrap() {
         if (document.getElementById("adsbygoogle-bait")) return;
-
         const bait = document.createElement("div");
         bait.id = "adsbygoogle-bait";
         bait.className = "adsbygoogle ad-banner ad-unit google-ad";
         bait.style.cssText = "width: 1px !important; height: 1px !important; position: absolute !important; left: -9999px !important; top: -9999px !important;";
-        
         (document.body || document.documentElement).appendChild(bait);
     }
 
-    // 3. Multi-Layer Anti-Adblock Engine
+    // 🆕 UPGRADE 2: Real AdSense IFRAME Size Inspector
+    function isRealAdSenseBlocked() {
+        const adContainers = document.querySelectorAll('.adsbygoogle');
+        if (adContainers.length > 0) {
+            let isAnyAdLoaded = false;
+            adContainers.forEach(container => {
+                const iframe = container.querySelector('iframe[id^="aswft_"]');
+                if (iframe) {
+                    const rect = iframe.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        isAnyAdLoaded = true;
+                    }
+                }
+            });
+            if (!isAnyAdLoaded) return true;
+        }
+        return false;
+    }
+
+    // 2. Combined Deep Check System
     async function checkAnalytics() {
-        createBaitElement();
-
-        // Check 1: Bait Element CSS Check (uBlock/Firefox Cosmetic Filter Trap)
+        // --- Layer A: Bait Trap Check ---
+        createBaitTrap();
         const bait = document.getElementById("adsbygoogle-bait");
-        let isBaitBlocked = false;
-
         if (bait) {
-            const computedStyle = window.getComputedStyle(bait);
-            if (
-                computedStyle.display === "none" || 
-                computedStyle.visibility === "hidden" || 
-                computedStyle.height === "0px" ||
-                bait.offsetHeight === 0
-            ) {
-                isBaitBlocked = true;
+            const style = window.getComputedStyle(bait);
+            if (style.display === "none" || style.visibility === "hidden" || bait.offsetHeight === 0) {
+                lockPage();
+                return;
             }
         }
 
-        // Check 2: Global Object Integrity Check
-        const isGtagAvailable = typeof window.gtag === "function";
-        const isRealTagLoaded = typeof window.google_tag_data !== "undefined";
-        const isAdblockLoaded = typeof window.adsbygoogle === "undefined" || (window.adsbygoogle && window.adsbygoogle.loaded === false);
-
-        if (isBaitBlocked || !isGtagAvailable || !isRealTagLoaded || isAdblockLoaded) {
+        // --- Layer B: Real AdSense IFRAME Check ---
+        if (isRealAdSenseBlocked()) {
             lockPage();
             return;
         }
 
-        // Check 3: Network Layer Ping
+        // --- Layer C: Global Objects & Spoofing Inspection ---
+        const isGtagAvailable = typeof window.gtag === "function";
+        const isRealTagLoaded = typeof window.google_tag_data !== "undefined";
+        const isAdblockLoaded = typeof window.adsbygoogle === "undefined" || (window.adsbygoogle && window.adsbygoogle.loaded === false);
+
+        if (!isGtagAvailable || !isRealTagLoaded || isAdblockLoaded) {
+            lockPage();
+            return;
+        }
+
+        // --- Layer D: AdSense Network Ping ---
         try {
             await fetch("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", {
                 method: "HEAD",
@@ -140,7 +156,7 @@
         }
     }
 
-    // 4. Heartbeat Runner
+    // 3. JavaScript Heartbeat
     function startHeartbeat() {
         checkAnalytics();
         setInterval(checkAnalytics, 1500);
