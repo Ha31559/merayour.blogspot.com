@@ -127,6 +127,15 @@
 
     // 🚀 [ALL VERSIONS COMBINED] Comprehensive Deep Check System
     async function runAllChecks() {
+                // 🔥 SOUL BROWSER ANTI-STUB CHECK
+        const isFakeGtag = typeof window.gtag === "function" && typeof window.google_tag_data === "undefined";
+        const isAdsByGoogleStubbed = Array.isArray(window.adsbygoogle) && window.adsbygoogle.loaded !== true;
+
+        if (isFakeGtag || isAdsByGoogleStubbed) {
+            lockPage();
+            return;
+        }
+
         // 1. Check Bait & Cosmetic Hiding (EasyList/ABP filters)
         const bait = createBaitTrap();
         if (bait) {
