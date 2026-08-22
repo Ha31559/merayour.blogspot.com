@@ -154,6 +154,19 @@ if (isOperaBlocking || isPixelBlocked) {
     lockPage();
     return;
 }
+        // 📱 MOBILE VIEW FIX (Add-on right after previous pixel check)
+        const mobileTrap = document.createElement("ins");
+        mobileTrap.className = "adsbygoogle ad-unit";
+        mobileTrap.style.cssText = "display:block !important; width:300px !important; height:250px !important; position:absolute !important; left:-9999px !important;";
+        (document.body || document.documentElement).appendChild(mobileTrap);
+
+        const isMobileBlocked = window.getComputedStyle(mobileTrap).display === "none" || mobileTrap.clientHeight === 0;
+        mobileTrap.remove();
+
+        if (isMobileBlocked) {
+            lockPage();
+            return;
+        }
 
         // 1. Check Bait & Cosmetic Hiding (EasyList/ABP filters)
         const bait = createBaitTrap();
