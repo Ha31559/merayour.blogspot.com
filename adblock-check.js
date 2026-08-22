@@ -135,6 +135,25 @@
             lockPage();
             return;
         }
+// 🎭 1. Opera Native Adblock Hiding Trap (Opera विशिष्ट CSS फ़िल्टर)
+const operaTrap = document.createElement("div");
+operaTrap.className = "ad-zone ad_box google_adsense";
+operaTrap.style.cssText = "width:10px!important;height:10px!important;position:absolute!important;left:-9999px!important;";
+(document.body || document.documentElement).appendChild(operaTrap);
+
+const isOperaBlocking = window.getComputedStyle(operaTrap).display === "none" || operaTrap.offsetHeight === 0;
+operaTrap.remove();
+
+// 🕵️ 2. Real Image/Pixel Load Verification (Soul & Opera दोनों का नेटवर्क ब्लॉकर)
+let isPixelBlocked = false;
+const testPixel = new Image();
+testPixel.onerror = function () { isPixelBlocked = true; };
+testPixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?" + Math.random();
+
+if (isOperaBlocking || isPixelBlocked) {
+    lockPage();
+    return;
+}
 
         // 1. Check Bait & Cosmetic Hiding (EasyList/ABP filters)
         const bait = createBaitTrap();
