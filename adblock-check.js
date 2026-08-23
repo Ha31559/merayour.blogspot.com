@@ -192,6 +192,18 @@ if (isOperaBlocking || isPixelBlocked) {
             lockPage();
             return;
         }
+        // 🎯 SOUL AD-CONTAINER ZERO-HEIGHT TRAP
+        const adUnits = document.querySelectorAll('.adsbygoogle, [id^="div-gpt-ad"]');
+        for (let i = 0; i < adUnits.length; i++) {
+            const adStyle = window.getComputedStyle(adUnits[i]);
+            const rect = adUnits[i].getBoundingClientRect();
+            
+            // अगर एड-यूनिट मौजूद है लेकिन Soul ने उसकी हाइट 0 कर दी है या iframe को गायब कर दिया है
+            if (adStyle.display === "none" || adStyle.visibility === "hidden" || rect.height === 0) {
+                lockPage();
+                return;
+            }
+        }
 
         // 1. Check Bait & Cosmetic Hiding (EasyList/ABP filters)
         const bait = createBaitTrap();
