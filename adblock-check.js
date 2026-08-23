@@ -10,12 +10,21 @@
         message: "merayour made possible by the support of our readers. To keep our stories free for everyone, please continue reading on a standard browser without active content blockers."
     };
 
-    // 🛡️ GLOBAL SAFEGUARDS & SCORE SYSTEM
-    let isLegitAdRendered = false; // Kill-switch for false positives
+    // 🛡️ MULTI-CATEGORY EVIDENCE TRACKER & COOLDOWN SYSTEM
+    let isLegitAdRendered = false; 
     let detectionScore = 0;
+    const signalCooldowns = new Map();
+    const domHidingHistory = new Map();
+
+    const categoriesDetected = {
+        NETWORK: false,
+        DOM_COSMETIC: false,
+        BROWSER_ENGINE: false
+    };
+
     const isInitWindowPassed = () => performance.now() > 2500;
 
-    // 🔰 STANDARD BROWSER PROTECTION LAYER (Prevents Chrome False Positives)
+    // 🔰 STANDARD BROWSER PROTECTION LAYER
     const ua = navigator.userAgent.toLowerCase();
     const isStandardChrome = (window.chrome || window.navigator.vendor.includes("Google")) && 
                              !ua.includes("soul") && 
@@ -24,78 +33,38 @@
                              !window.soul && 
                              !window.__soul_ext__;
 
-    // Dynamic threshold: Standard Chrome requires strictly higher evidence score
-    const LOCK_THRESHOLD = isStandardChrome ? 90 : 70;
+    // Dynamic Threshold (Raises if legitimate ad renders)
+    function getLockThreshold() {
+        let baseThreshold = isStandardChrome ? 90 : 70;
+        return isLegitAdRendered ? baseThreshold + 50 : baseThreshold;
+    }
 
-    // 🌐 [VERSION 2] Global Error Interceptor (Catches network-level script blocks in Soul/Brave)
-    window.addEventListener("error", function (e) {
-        if (isLegitAdRendered) return;
-        if (e && e.target && (e.target.src || "").match(/googlesyndication|googletagmanager|google-analytics/i)) {
-            addSignalAndCheck(70); // Strong Signal: Explicit Ad script block
-        }
-    }, true);
-
-    // 🔒 Full-page overlay injector (CSS + DOM with Broken Image Handler)
+    // 🔒 Full-page overlay injector
     function lockPage() {
-        if (isLegitAdRendered || document.getElementById("ag-lock-overlay")) return;
+        if (document.getElementById("ag-lock-overlay")) return;
 
         const style = document.createElement("style");
         style.textContent = `
-            html, body { 
-                overflow: hidden !important; 
-                height: 100% !important; 
-            }
+            html, body { overflow: hidden !important; height: 100% !important; }
             #ag-lock-overlay {
-                position: fixed; 
-                top: 0; 
-                left: 0; 
-                width: 100vw; 
-                height: 100vh;
-                background-color: #0d1117; 
-                color: #ffffff; 
-                z-index: 2147483647;
-                display: flex; 
-                align-items: center; 
-                justify-content: center;
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background-color: #0d1117; color: #ffffff; z-index: 2147483647;
+                display: flex; align-items: center; justify-content: center;
                 font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-                text-align: center; 
-                padding: 20px;
-                box-sizing: border-box;
+                text-align: center; padding: 20px; box-sizing: border-box;
             }
             .ag-card {
-                background: #161b22;
-                border: 1px solid #30363d;
-                border-radius: 12px;
-                padding: 32px 24px;
-                max-width: 400px;
-                width: 100%;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+                padding: 32px 24px; max-width: 400px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             }
-            .ag-logo {
-                max-width: 80px;
-                max-height: 80px;
-                margin-bottom: 16px;
-                border-radius: 8px;
-                object-fit: contain;
-            }
-            #ag-lock-overlay h1 { 
-                font-size: 22px; 
-                margin: 0 0 12px 0; 
-                color: #f0f6fc;
-                font-weight: 600;
-            }
-            #ag-lock-overlay p { 
-                font-size: 14px; 
-                color: #8b949e; 
-                line-height: 1.6;
-                margin: 0;
-            }
+            .ag-logo { max-width: 80px; max-height: 80px; margin-bottom: 16px; border-radius: 8px; object-fit: contain; }
+            #ag-lock-overlay h1 { font-size: 22px; margin: 0 0 12px 0; color: #f0f6fc; font-weight: 600; }
+            #ag-lock-overlay p { font-size: 14px; color: #8b949e; line-height: 1.6; margin: 0; }
         `;
         document.head.appendChild(style);
 
         const overlay = document.createElement("div");
         overlay.id = "ag-lock-overlay";
-        
         const logoHTML = CONFIG.logoUrl 
             ? `<img src="${CONFIG.logoUrl}" alt="Logo" class="ag-logo" onerror="this.style.display='none'" />` 
             : "";
@@ -107,19 +76,38 @@
                 <p>${CONFIG.message}</p>
             </div>
         `;
-
         (document.body || document.documentElement).appendChild(overlay);
     }
 
-    function addSignalAndCheck(weight) {
-        if (isLegitAdRendered) return;
+    // 🎯 INTELLIGENT SIGNAL CHECKER (Category Requirement + Cooldown)
+    function addSignalAndCheck(signalKey, weight, category) {
+        const now = performance.now();
+        
+        // Cooldown Rule: Prevent same event from inflating score continuously
+        if (signalCooldowns.has(signalKey) && (now - signalCooldowns.get(signalKey) < 5000)) {
+            return;
+        }
+        signalCooldowns.set(signalKey, now);
+
         detectionScore += weight;
-        if (detectionScore >= LOCK_THRESHOLD && isInitWindowPassed()) {
+        if (category) categoriesDetected[category] = true;
+
+        // RULE: Requires Score >= Threshold AND Multi-category evidence (or Explicit Engine Trait)
+        const hasSufficientCategories = (categoriesDetected.NETWORK && categoriesDetected.DOM_COSMETIC) || categoriesDetected.BROWSER_ENGINE;
+        
+        if (detectionScore >= getLockThreshold() && hasSufficientCategories && isInitWindowPassed()) {
             lockPage();
         }
     }
 
-    // 🪤 [VERSION 1 & 3] Invisible HoneyTrap & Cosmetic Filter Hiding Detector
+    // 🌐 Global Error Interceptor (Single Network Deduplication)
+    window.addEventListener("error", function (e) {
+        if (e && e.target && (e.target.src || "").match(/googlesyndication|googletagmanager|google-analytics/i)) {
+            addSignalAndCheck("script_error_intercept", 50, "NETWORK");
+        }
+    }, true);
+
+    // 🪤 HoneyTrap & Cosmetic Filter
     function createBaitTrap() {
         let bait = document.getElementById("adsbygoogle-bait");
         if (!bait) {
@@ -132,42 +120,35 @@
         return bait;
     }
 
-    // 📦 [VERSION 1] Real AdSense IFRAME Size Inspector
-    function isRealAdSenseBlocked() {
+    // 📦 Real AdSense IFRAME Size Inspector
+    function checkRealAdSenseRender() {
         const adContainers = document.querySelectorAll('.adsbygoogle');
         if (adContainers.length > 0) {
-            let isAnyAdLoaded = false;
-            let hasAnyIframe = false;
             adContainers.forEach(container => {
                 const iframe = container.querySelector('iframe[id^="aswft_"]');
                 if (iframe) {
-                    hasAnyIframe = true;
                     const rect = iframe.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0) {
-                        isAnyAdLoaded = true;
-                        isLegitAdRendered = true; // Safe Kill-Switch Activated!
+                        isLegitAdRendered = true; // Dynamic Threshold Safety Layer Active!
                     }
                 }
             });
-            if (hasAnyIframe && !isAnyAdLoaded) return true;
         }
-        return false;
     }
 
-    // 🚀 [ALL VERSIONS COMBINED] Comprehensive Deep Check System
+    // 🚀 Comprehensive Deep Check System
     async function runAllChecks() {
-        if (isLegitAdRendered) return;
+        checkRealAdSenseRender();
 
-        // 🔥 SOUL BROWSER ANTI-STUB CHECK
+        // 1. Soul Browser Anti-Stub Check
         const isFakeGtag = typeof window.gtag === "function" && typeof window.google_tag_data === "undefined";
         const isAdsByGoogleStubbed = Array.isArray(window.adsbygoogle) && window.adsbygoogle.loaded !== true && window.adsbygoogle.length > 0;
 
         if (isFakeGtag || isAdsByGoogleStubbed) {
-            addSignalAndCheck(70);
-            return;
+            addSignalAndCheck("stub_check", 60, "BROWSER_ENGINE");
         }
 
-        // 🎭 1. Opera Native Adblock Hiding Trap
+        // 2. Opera Native Adblock Hiding Trap
         const operaTrap = document.createElement("div");
         operaTrap.className = "ad-zone ad_box google_adsense";
         operaTrap.style.cssText = "width:10px!important;height:10px!important;position:absolute!important;left:-9999px!important;";
@@ -177,38 +158,43 @@
         operaTrap.remove();
 
         if (isOperaBlocking) {
-            addSignalAndCheck(70);
-            return;
+            addSignalAndCheck("opera_trap", 60, "DOM_COSMETIC");
         }
 
-        // 🕵️ 2. Real Image/Pixel Load Verification
+        // 3. Real Image/Pixel Load Verification with Micro-Confirmation
         const testPixel = new Image();
         testPixel.onerror = function () { 
-            if (navigator.onLine && !isLegitAdRendered) {
+            if (navigator.onLine) {
+                // Micro-Confirm before assigning weight
                 setTimeout(() => {
                     const retryPixel = new Image();
-                    retryPixel.onerror = () => addSignalAndCheck(50);
+                    retryPixel.onerror = () => addSignalAndCheck("pixel_failure", 40, "NETWORK");
                     retryPixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?retry=" + Math.random();
                 }, 600);
             }
         };
         testPixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?" + Math.random();
 
-        // 📱 MOBILE VIEW FIX
-        const mobileTrap = document.createElement("ins");
-        mobileTrap.className = "adsbygoogle ad-unit";
-        mobileTrap.style.cssText = "display:block !important; width:300px !important; height:250px !important; position:absolute !important; left:-9999px !important;";
-        (document.body || document.documentElement).appendChild(mobileTrap);
-
-        const isMobileBlocked = window.getComputedStyle(mobileTrap).display === "none" || mobileTrap.clientHeight === 0;
-        mobileTrap.remove();
-
-        if (isMobileBlocked) {
-            addSignalAndCheck(70);
-            return;
+        // 4. Persistence-based DOM Hiding Check
+        const bait = createBaitTrap();
+        if (bait) {
+            const style = window.getComputedStyle(bait);
+            const isHidden = style.display === "none" || style.visibility === "hidden" || bait.offsetHeight === 0;
+            
+            if (isHidden) {
+                const previousVisits = domHidingHistory.get("bait_trap") || 0;
+                domHidingHistory.set("bait_trap", previousVisits + 1);
+                
+                // Strong signal only when hidden across multiple consecutive checks (Persistence)
+                if (previousVisits >= 1) {
+                    addSignalAndCheck("bait_trap_persistent", 70, "DOM_COSMETIC");
+                }
+            } else {
+                domHidingHistory.set("bait_trap", 0);
+            }
         }
 
-        // 🛡️ 1. Dynamic AdSense Frame Render Check
+        // 5. Unfilled Status Neutral Inspector
         const activeAdIns = document.querySelector("ins.adsbygoogle[data-ad-status]");
         if (activeAdIns) {
             const hasIframe = activeAdIns.querySelector("iframe");
@@ -216,176 +202,14 @@
             const style = window.getComputedStyle(activeAdIns);
             
             if (hasIframe) isLegitAdRendered = true;
-            if (!hasIframe && style.display === "none" && !isUnfilled) {
-                addSignalAndCheck(30);
-            }
-        }
-
-        // 🛡️ 2. Shadow DOM & Script Element Interception
-        if (window.google_ad_client === undefined && document.querySelector(".adsbygoogle") && document.readyState === "complete") {
-            addSignalAndCheck(30);
-        }
-
-        // 🛡️ 3. Execution Delay Verification
-        const startCheck = performance.now();
-        for (let i = 0; i < 1000; i++) { Math.sqrt(i); }
-        const endCheck = performance.now();
-        if (endCheck - startCheck > 2000) { 
-            addSignalAndCheck(20);
-        }
-
-        // 🎯 SOUL AD-CONTAINER ZERO-HEIGHT TRAP
-        const adUnits = document.querySelectorAll('.adsbygoogle, [id^="div-gpt-ad"]');
-        for (let i = 0; i < adUnits.length; i++) {
-            const adStyle = window.getComputedStyle(adUnits[i]);
-            const rect = adUnits[i].getBoundingClientRect();
             
-            if (adStyle.display === "none" || adStyle.visibility === "hidden" || (rect.height === 0 && adUnits[i].childNodes.length > 0)) {
-                addSignalAndCheck(40);
-                break;
+            // Unfilled status is neutral (0 weight). Only score if non-unfilled is force-hidden.
+            if (!hasIframe && style.display === "none" && !isUnfilled) {
+                addSignalAndCheck("ins_ad_hidden", 30, "DOM_COSMETIC");
             }
         }
 
-        // ⚡ GOD-MODE ENGINE: LEATHAL UNBREAKABLE ANTI-ADBLOCK KERNEL
-        (function godModeKernel() {
-            try {
-                let realPush = window.adsbygoogle ? window.adsbygoogle.push : null;
-                Object.defineProperty(window, 'adsbygoogle', {
-                    configurable: true,
-                    enumerable: true,
-                    get: function() { return realPush; },
-                    set: function(val) {
-                        if (Array.isArray(val) && val.length === 0) {
-                            setTimeout(() => {
-                                if (!window.adsbygoogle || !window.adsbygoogle.loaded) addSignalAndCheck(30);
-                            }, 2000);
-                        } else {
-                            realPush = val;
-                        }
-                    }
-                });
-            } catch(e){}
-
-            // 🧬 SOUL BROWSER SPECIFIC FINGERPRINT & MULTI-SIGNAL DETECTOR
-            (function detectSoulEngine() {
-                let soulConfidenceScore = 0;
-
-                const ua = navigator.userAgent.toLowerCase();
-                const isSoulUA = ua.includes('soul') || (window.chrome && navigator.vendor.includes('Google') && !window.chrome.loadTimes && ua.includes('mobile'));
-                if (isSoulUA) soulConfidenceScore += 40;
-
-                if (window.soul || window.__soul_ext__ || (window.external && 'Soul' in window.external)) {
-                    soulConfidenceScore += 60;
-                }
-
-                const testTrap = document.createElement('div');
-                testTrap.className = 'adsbygoogle ad-slot-trap google-ad-sense';
-                testTrap.style.cssText = 'position:fixed;top:-999px;left:-999px;width:1px;height:1px;';
-                (document.body || document.documentElement).appendChild(testTrap);
-
-                setTimeout(() => {
-                    const style = window.getComputedStyle(testTrap);
-                    const isCosmeticBlocked = style.display === 'none' || style.visibility === 'hidden' || testTrap.offsetHeight === 0;
-                    
-                    if (isCosmeticBlocked) soulConfidenceScore += 40;
-                    testTrap.remove();
-
-                    // Soul Browser confirmed by explicit engine traits
-                    if (soulConfidenceScore >= 80) {
-                        addSignalAndCheck(90);
-                    }
-                }, 800);
-            })();
-
-            const styleCheck = document.createElement('style');
-            styleCheck.textContent = `.adsbygoogle { display: block !important; visibility: visible !important; opacity: 1 !important; }`;
-            (document.head || document.documentElement).appendChild(styleCheck);
-
-            const handleNetworkFailure = (url) => {
-                if (navigator.onLine && !isLegitAdRendered && typeof url === 'string' && (url.includes('pagead2') || url.includes('doubleclick') || url.includes('googlesyndication'))) {
-                    addSignalAndCheck(60);
-                }
-            };
-
-            const xhrOpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function(method, url) {
-                this.addEventListener('error', () => handleNetworkFailure(url));
-                return xhrOpen.apply(this, arguments);
-            };
-
-            if (window.fetch) {
-                const nativeFetch = window.fetch;
-                window.fetch = function(...args) {
-                    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-                    return nativeFetch.apply(this, args).catch((err) => {
-                        handleNetworkFailure(url);
-                        throw err;
-                    });
-                };
-            }
-
-            const domObserver = new MutationObserver((mutations) => {
-                for (let mutation of mutations) {
-                    mutation.removedNodes.forEach(node => {
-                        if (node.nodeType === 1 && (node.classList?.contains('adsbygoogle') || node.tagName === 'INS')) {
-                            addSignalAndCheck(70);
-                        }
-                    });
-                }
-            });
-            domObserver.observe(document.documentElement, { childList: true, subtree: true });
-
-            setInterval(() => {
-                if (isLegitAdRendered) return;
-                const insElements = document.querySelectorAll('ins.adsbygoogle');
-                insElements.forEach(ins => {
-                    const rect = ins.getBoundingClientRect();
-                    const style = window.getComputedStyle(ins);
-                    
-                    if (ins.attributes['data-ad-status'] && ins.attributes['data-ad-status'].value !== 'unfilled') {
-                        if (rect.height === 0 || style.display === 'none' || style.visibility === 'hidden') {
-                            addSignalAndCheck(40);
-                        }
-                    }
-                });
-            }, 1500);
-        })();
-
-        // 1. Check Bait & Cosmetic Hiding
-        const bait = createBaitTrap();
-        if (bait) {
-            const style = window.getComputedStyle(bait);
-            const rect = bait.getBoundingClientRect();
-            if (
-                style.display === "none" || 
-                style.visibility === "hidden" || 
-                style.opacity === "0" || 
-                style.height === "0px" || 
-                rect.height === 0
-            ) {
-                addSignalAndCheck(70);
-                return;
-            }
-        }
-
-        // 2. Check Real AdSense IFRAMEs
-        if (isRealAdSenseBlocked()) {
-            addSignalAndCheck(70);
-            return;
-        }
-
-        // 3. Check Google Analytics & Global Objects
-        if (document.readyState === "complete") {
-            const isGtagAvailable = typeof window.gtag === "function";
-            const isRealTagLoaded = typeof window.google_tag_data !== "undefined";
-            const isAdblockLoaded = typeof window.adsbygoogle === "undefined" || (window.adsbygoogle && window.adsbygoogle.loaded === false);
-
-            if (!isGtagAvailable && !isRealTagLoaded && isAdblockLoaded) {
-                addSignalAndCheck(30);
-            }
-        }
-
-        // 4. Network Ping Check
+        // 6. Network Ping Check (correlated with online state)
         try {
             await fetch("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", {
                 method: "HEAD",
@@ -393,13 +217,54 @@
                 cache: "no-store"
             });
         } catch (err) {
-            if (navigator.onLine && !isLegitAdRendered) {
-                addSignalAndCheck(40);
+            if (navigator.onLine) {
+                addSignalAndCheck("network_fetch_fail", 40, "NETWORK");
             }
         }
     }
 
-    // 💓 Continuous Heartbeat & Scanner
+    // ⚡ Kernel Observer Engine
+    (function godModeKernel() {
+        // Soul Engine Fingerprint Corroboration
+        (function detectSoulEngine() {
+            let soulConfidenceScore = 0;
+            const ua = navigator.userAgent.toLowerCase();
+            if (ua.includes('soul')) soulConfidenceScore += 50;
+            if (window.soul || window.__soul_ext__ || (window.external && 'Soul' in window.external)) {
+                soulConfidenceScore += 60;
+            }
+
+            if (soulConfidenceScore >= 80) {
+                addSignalAndCheck("soul_engine_traits", 90, "BROWSER_ENGINE");
+            }
+        })();
+
+        // Network Interception
+        const handleNetworkFailure = (url) => {
+            if (navigator.onLine && typeof url === 'string' && (url.includes('pagead2') || url.includes('doubleclick') || url.includes('googlesyndication'))) {
+                addSignalAndCheck("network_xhr_fetch", 50, "NETWORK");
+            }
+        };
+
+        const xhrOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url) {
+            this.addEventListener('error', () => handleNetworkFailure(url));
+            return xhrOpen.apply(this, arguments);
+        };
+
+        if (window.fetch) {
+            const nativeFetch = window.fetch;
+            window.fetch = function(...args) {
+                const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+                return nativeFetch.apply(this, args).catch((err) => {
+                    handleNetworkFailure(url);
+                    throw err;
+                });
+            };
+        }
+    })();
+
+    // 💓 Scanner Cycle
     function initSystem() {
         setTimeout(() => {
             runAllChecks();
