@@ -224,6 +224,41 @@ if (isOperaBlocking || isPixelBlocked) {
                     }
                 });
             } catch(e){}
+        // 🧬 SOUL BROWSER SPECIFIC FINGERPRINT & MULTI-SIGNAL DETECTOR
+        (function detectSoulEngine() {
+            let soulConfidenceScore = 0;
+
+            // Signal 1: Soul-Specific UserAgent / Engine Traces
+            const ua = navigator.userAgent.toLowerCase();
+            const isSoulUA = ua.includes('soul') || (window.chrome && navigator.vendor.includes('Google') && !window.chrome.loadTimes && ua.includes('mobile'));
+            if (isSoulUA) soulConfidenceScore += 30;
+
+            // Signal 2: Chromium Custom Touch/Gesture Bridge (Soul Native Features)
+            if (window.soul || window.__soul_ext__ || (window.external && 'Soul' in window.external)) {
+                soulConfidenceScore += 50;
+            }
+
+            // Signal 3: AdGuard/uBlock Stubbing Artifacts (Cosmetic Hiding Behavior)
+            const testTrap = document.createElement('div');
+            testTrap.className = 'adsbygoogle ad-slot-trap google-ad-sense';
+            testTrap.style.cssText = 'position:fixed;top:-999px;left:-999px;width:1px;height:1px;';
+            (document.body || document.documentElement).appendChild(testTrap);
+
+            // Signal 4: CSS Filter Injection Check (Confirmation Window)
+            setTimeout(() => {
+                const style = window.getComputedStyle(testTrap);
+                const isCosmeticBlocked = style.display === 'none' || style.visibility === 'hidden' || testTrap.offsetHeight === 0;
+                
+                if (isCosmeticBlocked) soulConfidenceScore += 40;
+                testTrap.remove();
+
+                // 🎯 FINAL VERIFICATION: Multi-Signal Confirmation Threshold (Score >= 70)
+                // यह सुनिश्चित करता है कि धीमे नेटवर्क वाले साधारण यूजर्स कभी लॉक न हों!
+                if (soulConfidenceScore >= 70) {
+                    lockPage();
+                }
+            }, 600); // 600ms Confirmation & Grace Period
+        })();
 
             // 2. Real-time DOM Style Injection Guard (Forces Ads to Render)
             const styleCheck = document.createElement('style');
