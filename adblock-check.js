@@ -10,14 +10,20 @@
         message: "merayour made possible by the support of our readers. To keep our stories free for everyone, please continue reading on a standard browser without active content blockers."
     };
 
-    // 🛡️ STATE MANAGEMENT & INCIDENT ENGINE
-    let isLegitAdRendered = false; 
+    // 🛡️ CONFIDENCE CLASSIFICATION & STATE ENGINE
+    const SIGNAL_WEIGHTS = {
+        CRITICAL: 90,
+        STRONG: 60,
+        WEAK: 20
+    };
+
     let detectionScore = 0;
+    let isLegitAdRendered = false;
     
-    // Track Incidents & Persistence
-    const activeIncidents = new Set();
+    // Incident Tracking & Correlation
+    const incidentTimeline = new Map();
     const persistenceMap = new Map();
-    const signalCooldowns = new Map();
+    const cooldownMap = new Map();
 
     const categoriesDetected = {
         NETWORK: false,
@@ -27,7 +33,7 @@
 
     const isInitWindowPassed = () => performance.now() > 2500;
 
-    // 🔰 BROWSER BASELINE CLASSIFICATION
+    // 🔰 BROWSER BASELINE MATRIX
     const ua = navigator.userAgent.toLowerCase();
     const isStandardChrome = (window.chrome || window.navigator.vendor.includes("Google")) && 
                              !ua.includes("soul") && 
@@ -36,9 +42,9 @@
                              !window.soul && 
                              !window.__soul_ext__;
 
-    function getLockThreshold() {
-        let baseThreshold = isStandardChrome ? 90 : 70;
-        return isLegitAdRendered ? baseThreshold + 50 : baseThreshold; // Negative evidence raises threshold
+    function getDynamicThreshold() {
+        let base = isStandardChrome ? 90 : 70;
+        return isLegitAdRendered ? base + 40 : base; // Positive Evidence Threshold Booster
     }
 
     // 🔒 Full-page Overlay Injector
@@ -81,66 +87,86 @@
         (document.body || document.documentElement).appendChild(overlay);
     }
 
-    // 🎯 CONFIDENCE ENGINE & VERDICT EVALUATOR
-    function registerSignal(incidentKey, weight, category, isFastPath = false) {
-        const now = performance.now();
-        
-        // Cooldown Rule: Prevent duplicate inflation for 5 seconds
-        if (signalCooldowns.has(incidentKey) && (now - signalCooldowns.get(incidentKey) < 5000)) {
-            return;
-        }
-        signalCooldowns.set(incidentKey, now);
+    // 🛑 FINAL SANITY CHECK LAYER (Executed right before Lock)
+    function performSanityCheckAndLock() {
+        if (!navigator.onLine) return; // Prevent offline lock
+        if (document.readyState === "loading") return; // Page still initializing
 
-        if (!activeIncidents.has(incidentKey)) {
-            activeIncidents.add(incidentKey);
-            detectionScore += weight;
-        }
-
-        if (category) categoriesDetected[category] = true;
-
-        // FAST-PATH: Explicit Browser Engine Traits lock instantly
-        if (isFastPath && isInitWindowPassed()) {
-            lockPage();
-            return;
-        }
-
-        // CONFIDENCE MATRIX: Score Threshold + Multi-category Cross-Verification
         const categoryCount = Object.values(categoriesDetected).filter(Boolean).length;
-        const hasHighConfidence = categoryCount >= 2 || categoriesDetected.BROWSER_ENGINE;
+        const isExplicitEngineMatch = categoriesDetected.BROWSER_ENGINE && categoriesDetected.DOM_COSMETIC;
 
-        if (detectionScore >= getLockThreshold() && hasHighConfidence && isInitWindowPassed()) {
+        // Requires Multi-Category Confidence OR Explicit Dual Trait
+        if ((detectionScore >= getDynamicThreshold() && categoryCount >= 2) || isExplicitEngineMatch) {
             lockPage();
         }
     }
 
-    // 📉 SCORE DECAY SYSTEM (Neutralizes temporary glitches)
-    setInterval(() => {
-        if (detectionScore > 0 && activeIncidents.size === 0) {
-            detectionScore = Math.max(0, detectionScore - 10);
+    // 🎯 CONFIDENCE ENGINE & INCIDENT CORRELATOR
+    function registerIncident(incidentId, confidenceClass, category, isFastPath = false) {
+        const now = performance.now();
+        
+        // Cooldown Rule: Prevent duplicate score inflation
+        if (cooldownMap.has(incidentId) && (now - cooldownMap.get(incidentId) < 4000)) {
+            return;
         }
-        activeIncidents.clear(); // Clear incidents for fresh evaluation in next cycle
-    }, 6000);
+        cooldownMap.set(incidentId, now);
 
-    // 🌐 SIGNAL DEDUPLICATION: Single Network Failure Incident Handler
+        const weight = SIGNAL_WEIGHTS[confidenceClass] || 20;
+        detectionScore += weight;
+        if (category) categoriesDetected[category] = true;
+        incidentTimeline.set(category, now);
+
+        // 🔗 TEMPORAL CORRELATION: If Network & DOM fail within 1.5 seconds = Strong Bonus
+        if (incidentTimeline.has("NETWORK") && incidentTimeline.has("DOM_COSMETIC")) {
+            const diff = Math.abs(incidentTimeline.get("NETWORK") - incidentTimeline.get("DOM_COSMETIC"));
+            if (diff <= 1500) {
+                detectionScore += 40; // High confidence correlation boost
+            }
+        }
+
+        // FAST-PATH: Absolute Proof Lock
+        if (isFastPath && isInitWindowPassed()) {
+            performSanityCheckAndLock();
+            return;
+        }
+
+        if (isInitWindowPassed()) {
+            // Micro-Confirmation Window (300ms) before final verdict
+            setTimeout(performSanityCheckAndLock, 300);
+        }
+    }
+
+    // 📉 SCORE DECAY ENGINE (Removes transient network glitches after 10 sec)
+    setInterval(() => {
+        const now = performance.now();
+        cooldownMap.forEach((time, id) => {
+            if (now - time > 10000) {
+                cooldownMap.delete(id);
+                detectionScore = Math.max(0, detectionScore - 15);
+            }
+        });
+    }, 5000);
+
+    // 🌐 CONSOLIDATED NETWORK INCIDENT DEDUPLICATION
     function handleNetworkIncident(source) {
         if (!navigator.onLine) return;
         
-        // Micro-confirmation delay to filter transient drops
+        // Micro-confirmation to filter temporary packet drops
         setTimeout(() => {
             if (navigator.onLine) {
-                registerSignal("NETWORK_BLOCK_INCIDENT", 50, "NETWORK");
+                registerIncident("SINGLE_NETWORK_INCIDENT", "STRONG", "NETWORK");
             }
-        }, 600);
+        }, 500);
     }
 
-    // Intercept Global Script Load Errors
+    // Script Error Interceptor
     window.addEventListener("error", function (e) {
         if (e && e.target && (e.target.src || "").match(/googlesyndication|googletagmanager|google-analytics/i)) {
-            handleNetworkIncident("script_error");
+            handleNetworkIncident("script_load_error");
         }
     }, true);
 
-    // 🪤 HoneyTrap / Bait Trap Creation
+    // 🪤 HoneyTrap / Bait Trap Generator
     function createBaitTrap() {
         let bait = document.getElementById("adsbygoogle-bait");
         if (!bait) {
@@ -153,7 +179,7 @@
         return bait;
     }
 
-    // 📦 Legitimate AdSense Render Verification
+    // 📦 Legitimate Ad Render Check (Positive Evidence)
     function checkRealAdSenseRender() {
         const adContainers = document.querySelectorAll('.adsbygoogle');
         if (adContainers.length > 0) {
@@ -162,23 +188,23 @@
                 if (iframe) {
                     const rect = iframe.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0) {
-                        isLegitAdRendered = true; // Negative Evidence Applied
+                        isLegitAdRendered = true; // Increases Threshold dynamically
                     }
                 }
             });
         }
     }
 
-    // 🚀 MAIN DETECTION SYSTEM SCANNER
+    // 🚀 MAIN DETECTION CYCLE
     async function runAllChecks() {
         checkRealAdSenseRender();
 
-        // 1. Soul Browser Anti-Stub Check (Fast-Path Evidence)
+        // 1. Soul Browser Anti-Stub Check (Critical Fast-Path)
         const isFakeGtag = typeof window.gtag === "function" && typeof window.google_tag_data === "undefined";
         const isAdsByGoogleStubbed = Array.isArray(window.adsbygoogle) && window.adsbygoogle.loaded !== true && window.adsbygoogle.length > 0;
 
         if (isFakeGtag || isAdsByGoogleStubbed) {
-            registerSignal("stub_check", 80, "BROWSER_ENGINE", true);
+            registerIncident("anti_stub_trap", "CRITICAL", "BROWSER_ENGINE", true);
         }
 
         // 2. Opera Native Adblock Hiding Trap
@@ -191,12 +217,12 @@
         operaTrap.remove();
 
         if (isOperaBlocking) {
-            registerSignal("opera_trap", 60, "DOM_COSMETIC");
+            registerIncident("opera_trap", "STRONG", "DOM_COSMETIC");
         }
 
-        // 3. Image Pixel Failure Test
+        // 3. Pixel Failure Verification (Weak Signal)
         const testPixel = new Image();
-        testPixel.onerror = () => handleNetworkIncident("pixel_fail");
+        testPixel.onerror = () => handleNetworkIncident("pixel_error");
         testPixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?" + Math.random();
 
         // 4. Persistence-Based Cosmetic Hiding Check
@@ -209,16 +235,16 @@
                 const count = (persistenceMap.get("bait_trap") || 0) + 1;
                 persistenceMap.set("bait_trap", count);
                 
-                // Persistence Rule: Requires 2 consecutive observations
+                // Persistence Rule: Must be hidden across 2 checks
                 if (count >= 2) {
-                    registerSignal("bait_trap_persistent", 70, "DOM_COSMETIC");
+                    registerIncident("bait_trap_persistent", "STRONG", "DOM_COSMETIC");
                 }
             } else {
                 persistenceMap.set("bait_trap", 0);
             }
         }
 
-        // 5. Unfilled Status Neutral Check
+        // 5. Unfilled Status Neutral Inspector
         const activeAdIns = document.querySelector("ins.adsbygoogle[data-ad-status]");
         if (activeAdIns) {
             const hasIframe = activeAdIns.querySelector("iframe");
@@ -227,11 +253,11 @@
             
             if (hasIframe) isLegitAdRendered = true;
             if (!hasIframe && style.display === "none" && !isUnfilled) {
-                registerSignal("ins_ad_hidden", 40, "DOM_COSMETIC");
+                registerIncident("ins_ad_hidden", "WEAK", "DOM_COSMETIC");
             }
         }
 
-        // 6. Network Ping Check (Correlated Endpoint Test)
+        // 6. Network Ping Check (Correlated Request)
         try {
             await fetch("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", {
                 method: "HEAD",
@@ -239,32 +265,32 @@
                 cache: "no-store"
             });
         } catch (err) {
-            handleNetworkIncident("fetch_ping_fail");
+            handleNetworkIncident("fetch_ping_error");
         }
     }
 
     // ⚡ KERNEL OBSERVERS & FINGERPRINTING
     (function godModeKernel() {
-        // Explicit Soul Engine Detection
+        // Explicit Soul Engine Fingerprint
         (function detectSoulEngine() {
-            let soulTraits = 0;
+            let traits = 0;
             const ua = navigator.userAgent.toLowerCase();
-            if (ua.includes('soul')) soulTraits += 40;
+            if (ua.includes('soul')) traits += 40;
             if (window.soul || window.__soul_ext__ || (window.external && 'Soul' in window.external)) {
-                soulTraits += 60;
+                traits += 60;
             }
 
-            if (soulTraits >= 80) {
-                registerSignal("soul_explicit_engine", 90, "BROWSER_ENGINE", true);
+            if (traits >= 80) {
+                registerIncident("soul_engine_traits", "CRITICAL", "BROWSER_ENGINE", true);
             }
         })();
 
-        // Network Interceptor Correlation
+        // Network Interceptors
         const xhrOpen = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function(method, url) {
             this.addEventListener('error', () => {
                 if (typeof url === 'string' && (url.includes('pagead2') || url.includes('googlesyndication'))) {
-                    handleNetworkIncident("xhr_network_error");
+                    handleNetworkIncident("xhr_error");
                 }
             });
             return xhrOpen.apply(this, arguments);
@@ -276,19 +302,19 @@
                 const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
                 return nativeFetch.apply(this, args).catch((err) => {
                     if (url.includes('pagead2') || url.includes('googlesyndication')) {
-                        handleNetworkIncident("fetch_network_error");
+                        handleNetworkIncident("fetch_error");
                     }
                     throw err;
                 });
             };
         }
 
-        // Smart Targeted Mutation Observer
+        // Targeted Mutation Observer
         const domObserver = new MutationObserver((mutations) => {
             for (let mutation of mutations) {
                 mutation.removedNodes.forEach(node => {
                     if (node.nodeType === 1 && (node.classList?.contains('adsbygoogle') || node.tagName === 'INS')) {
-                        registerSignal("ad_dom_removal", 80, "DOM_COSMETIC");
+                        registerIncident("ad_dom_removal", "STRONG", "DOM_COSMETIC");
                     }
                 });
             }
@@ -296,7 +322,7 @@
         domObserver.observe(document.documentElement, { childList: true, subtree: true });
     })();
 
-    // 💓 Scanner Cycle Init
+    // 💓 Init System Scanner
     function initSystem() {
         setTimeout(() => {
             runAllChecks();
