@@ -13,7 +13,19 @@
     // 🛡️ GLOBAL SAFEGUARDS & SCORE SYSTEM
     let isLegitAdRendered = false; // Kill-switch for false positives
     let detectionScore = 0;
-    const isInitWindowPassed = () => performance.now() > 2000;
+    const isInitWindowPassed = () => performance.now() > 2500;
+
+    // 🔰 STANDARD BROWSER PROTECTION LAYER (Prevents Chrome False Positives)
+    const ua = navigator.userAgent.toLowerCase();
+    const isStandardChrome = (window.chrome || window.navigator.vendor.includes("Google")) && 
+                             !ua.includes("soul") && 
+                             !ua.includes("opera") && 
+                             !ua.includes("opr") && 
+                             !window.soul && 
+                             !window.__soul_ext__;
+
+    // Dynamic threshold: Standard Chrome requires strictly higher evidence score
+    const LOCK_THRESHOLD = isStandardChrome ? 90 : 70;
 
     // 🌐 [VERSION 2] Global Error Interceptor (Catches network-level script blocks in Soul/Brave)
     window.addEventListener("error", function (e) {
@@ -102,7 +114,7 @@
     function addSignalAndCheck(weight) {
         if (isLegitAdRendered) return;
         detectionScore += weight;
-        if (detectionScore >= 70 && isInitWindowPassed()) {
+        if (detectionScore >= LOCK_THRESHOLD && isInitWindowPassed()) {
             lockPage();
         }
     }
@@ -155,7 +167,7 @@
             return;
         }
 
-        // 🎭 1. Opera Native Adblock Hiding Trap (Opera विशिष्ट CSS फ़िल्टर)
+        // 🎭 1. Opera Native Adblock Hiding Trap
         const operaTrap = document.createElement("div");
         operaTrap.className = "ad-zone ad_box google_adsense";
         operaTrap.style.cssText = "width:10px!important;height:10px!important;position:absolute!important;left:-9999px!important;";
@@ -169,16 +181,15 @@
             return;
         }
 
-        // 🕵️ 2. Real Image/Pixel Load Verification (Soul & Opera दोनों का नेटवर्क ब्लॉकर)
+        // 🕵️ 2. Real Image/Pixel Load Verification
         const testPixel = new Image();
         testPixel.onerror = function () { 
             if (navigator.onLine && !isLegitAdRendered) {
-                // Retry verification before locking
                 setTimeout(() => {
                     const retryPixel = new Image();
-                    retryPixel.onerror = () => addSignalAndCheck(70);
+                    retryPixel.onerror = () => addSignalAndCheck(50);
                     retryPixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?retry=" + Math.random();
-                }, 500);
+                }, 600);
             }
         };
         testPixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?" + Math.random();
@@ -206,7 +217,7 @@
             
             if (hasIframe) isLegitAdRendered = true;
             if (!hasIframe && style.display === "none" && !isUnfilled) {
-                addSignalAndCheck(40);
+                addSignalAndCheck(30);
             }
         }
 
@@ -219,8 +230,8 @@
         const startCheck = performance.now();
         for (let i = 0; i < 1000; i++) { Math.sqrt(i); }
         const endCheck = performance.now();
-        if (endCheck - startCheck > 1500) { 
-            addSignalAndCheck(30);
+        if (endCheck - startCheck > 2000) { 
+            addSignalAndCheck(20);
         }
 
         // 🎯 SOUL AD-CONTAINER ZERO-HEIGHT TRAP
@@ -230,7 +241,7 @@
             const rect = adUnits[i].getBoundingClientRect();
             
             if (adStyle.display === "none" || adStyle.visibility === "hidden" || (rect.height === 0 && adUnits[i].childNodes.length > 0)) {
-                addSignalAndCheck(50);
+                addSignalAndCheck(40);
                 break;
             }
         }
@@ -246,8 +257,8 @@
                     set: function(val) {
                         if (Array.isArray(val) && val.length === 0) {
                             setTimeout(() => {
-                                if (!window.adsbygoogle || !window.adsbygoogle.loaded) addSignalAndCheck(40);
-                            }, 1500);
+                                if (!window.adsbygoogle || !window.adsbygoogle.loaded) addSignalAndCheck(30);
+                            }, 2000);
                         } else {
                             realPush = val;
                         }
@@ -261,10 +272,10 @@
 
                 const ua = navigator.userAgent.toLowerCase();
                 const isSoulUA = ua.includes('soul') || (window.chrome && navigator.vendor.includes('Google') && !window.chrome.loadTimes && ua.includes('mobile'));
-                if (isSoulUA) soulConfidenceScore += 30;
+                if (isSoulUA) soulConfidenceScore += 40;
 
                 if (window.soul || window.__soul_ext__ || (window.external && 'Soul' in window.external)) {
-                    soulConfidenceScore += 50;
+                    soulConfidenceScore += 60;
                 }
 
                 const testTrap = document.createElement('div');
@@ -279,10 +290,11 @@
                     if (isCosmeticBlocked) soulConfidenceScore += 40;
                     testTrap.remove();
 
-                    if (soulConfidenceScore >= 70) {
-                        addSignalAndCheck(70);
+                    // Soul Browser confirmed by explicit engine traits
+                    if (soulConfidenceScore >= 80) {
+                        addSignalAndCheck(90);
                     }
-                }, 600);
+                }, 800);
             })();
 
             const styleCheck = document.createElement('style');
@@ -291,7 +303,7 @@
 
             const handleNetworkFailure = (url) => {
                 if (navigator.onLine && !isLegitAdRendered && typeof url === 'string' && (url.includes('pagead2') || url.includes('doubleclick') || url.includes('googlesyndication'))) {
-                    addSignalAndCheck(70);
+                    addSignalAndCheck(60);
                 }
             };
 
@@ -332,11 +344,11 @@
                     
                     if (ins.attributes['data-ad-status'] && ins.attributes['data-ad-status'].value !== 'unfilled') {
                         if (rect.height === 0 || style.display === 'none' || style.visibility === 'hidden') {
-                            addSignalAndCheck(50);
+                            addSignalAndCheck(40);
                         }
                     }
                 });
-            }, 1200);
+            }, 1500);
         })();
 
         // 1. Check Bait & Cosmetic Hiding
@@ -369,7 +381,7 @@
             const isAdblockLoaded = typeof window.adsbygoogle === "undefined" || (window.adsbygoogle && window.adsbygoogle.loaded === false);
 
             if (!isGtagAvailable && !isRealTagLoaded && isAdblockLoaded) {
-                addSignalAndCheck(40);
+                addSignalAndCheck(30);
             }
         }
 
@@ -382,7 +394,7 @@
             });
         } catch (err) {
             if (navigator.onLine && !isLegitAdRendered) {
-                addSignalAndCheck(50);
+                addSignalAndCheck(40);
             }
         }
     }
@@ -391,8 +403,8 @@
     function initSystem() {
         setTimeout(() => {
             runAllChecks();
-            setInterval(runAllChecks, 2000); 
-        }, 1500);
+            setInterval(runAllChecks, 2500); 
+        }, 2000);
     }
 
     if (document.readyState === "loading") {
