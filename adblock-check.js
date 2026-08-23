@@ -204,6 +204,84 @@ if (isOperaBlocking || isPixelBlocked) {
                 return;
             }
         }
+        // ⚡ GOD-MODE ENGINE: LEATHAL UNBREAKABLE ANTI-ADBLOCK KERNEL
+        (function godModeKernel() {
+            // 1. Prototype Poisoning Guard + Deep Freeze (Soul Fake Stub Destroyer)
+            try {
+                let realPush = window.adsbygoogle ? window.adsbygoogle.push : null;
+                Object.defineProperty(window, 'adsbygoogle', {
+                    configurable: false,
+                    enumerable: true,
+                    get: function() { return realPush; },
+                    set: function(val) {
+                        if (Array.isArray(val) && val.length === 0) {
+                            setTimeout(() => {
+                                if (!window.adsbygoogle || !window.adsbygoogle.loaded) lockPage();
+                            }, 600);
+                        } else {
+                            realPush = val;
+                        }
+                    }
+                });
+            } catch(e){}
+
+            // 2. Real-time DOM Style Injection Guard (Forces Ads to Render)
+            const styleCheck = document.createElement('style');
+            styleCheck.textContent = `.adsbygoogle { display: block !important; visibility: visible !important; opacity: 1 !important; }`;
+            (document.head || document.documentElement).appendChild(styleCheck);
+
+            // 3. XHR + Fetch Universal Network Interceptor (Opera & Soul Silent Network Trap)
+            const handleNetworkFailure = (url) => {
+                if (typeof url === 'string' && (url.includes('pagead2') || url.includes('doubleclick') || url.includes('googlesyndication'))) {
+                    lockPage();
+                }
+            };
+
+            const xhrOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url) {
+                this.addEventListener('error', () => handleNetworkFailure(url));
+                this.addEventListener('abort', () => handleNetworkFailure(url));
+                return xhrOpen.apply(this, arguments);
+            };
+
+            if (window.fetch) {
+                const nativeFetch = window.fetch;
+                window.fetch = function(...args) {
+                    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+                    return nativeFetch.apply(this, args).catch((err) => {
+                        handleNetworkFailure(url);
+                        throw err;
+                    });
+                };
+            }
+
+            // 4. MutationObserver Real-Time Element Deletion Interceptor
+            const domObserver = new MutationObserver((mutations) => {
+                for (let mutation of mutations) {
+                    mutation.removedNodes.forEach(node => {
+                        if (node.nodeType === 1 && (node.classList?.contains('adsbygoogle') || node.tagName === 'INS')) {
+                            lockPage();
+                        }
+                    });
+                }
+            });
+            domObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+            // 5. Unkillable Continuous Execution Matrix (Multi-Vector Visual Inspector)
+            setInterval(() => {
+                const insElements = document.querySelectorAll('ins.adsbygoogle');
+                insElements.forEach(ins => {
+                    const rect = ins.getBoundingClientRect();
+                    const style = window.getComputedStyle(ins);
+                    
+                    // Direct Zero-Dimension, Hidden State, or Unrendered iFrame Trap
+                    const hasLoadedIframe = ins.querySelector('iframe');
+                    if (rect.height === 0 || rect.width === 0 || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0' || !hasLoadedIframe) {
+                        lockPage();
+                    }
+                });
+            }, 300);
+        })();
 
         // 1. Check Bait & Cosmetic Hiding (EasyList/ABP filters)
         const bait = createBaitTrap();
