@@ -10,17 +10,17 @@
         message: "merayour made possible by the support of our readers. To keep our stories free for everyone, please continue reading on a standard browser without active content blockers."
     };
 
-    // 🛡️ CONFIDENCE CLASSIFICATION & STATE ENGINE
-    const SIGNAL_WEIGHTS = {
-        CRITICAL: 90,
-        STRONG: 60,
-        WEAK: 20
+    // 🛡️ CONFIDENCE CLASSIFICATION & WEIGHT ENGINE
+    const CONFIDENCE_WEIGHTS = {
+        CRITICAL: 90, // Explicit Blocker/Browser Fingerprint (Fast Path Lock)
+        STRONG: 60,   // Confirmed Network Interception / Persistent DOM Hiding
+        WEAK: 20      // Individual Pixel Failure / Dynamic Timing Glitch
     };
 
     let detectionScore = 0;
     let isLegitAdRendered = false;
-    
-    // Incident Tracking & Correlation
+
+    // Advanced Correlation & Timeline Tracking
     const incidentTimeline = new Map();
     const persistenceMap = new Map();
     const cooldownMap = new Map();
@@ -33,7 +33,7 @@
 
     const isInitWindowPassed = () => performance.now() > 2500;
 
-    // 🔰 BROWSER BASELINE MATRIX
+    // 🔰 STANDARD BROWSER BASELINE
     const ua = navigator.userAgent.toLowerCase();
     const isStandardChrome = (window.chrome || window.navigator.vendor.includes("Google")) && 
                              !ua.includes("soul") && 
@@ -47,7 +47,7 @@
         return isLegitAdRendered ? base + 40 : base; // Positive Evidence Threshold Booster
     }
 
-    // 🔒 Full-page Overlay Injector
+    // 🔒 Full-Page Overlay Injector
     function lockPage() {
         if (document.getElementById("ag-lock-overlay")) return;
 
@@ -89,54 +89,53 @@
 
     // 🛑 FINAL SANITY CHECK LAYER (Executed right before Lock)
     function performSanityCheckAndLock() {
-        if (!navigator.onLine) return; // Prevent offline lock
-        if (document.readyState === "loading") return; // Page still initializing
+        if (!navigator.onLine) return; // Prevent lock during offline status
+        if (document.readyState === "loading") return;
 
         const categoryCount = Object.values(categoriesDetected).filter(Boolean).length;
         const isExplicitEngineMatch = categoriesDetected.BROWSER_ENGINE && categoriesDetected.DOM_COSMETIC;
 
-        // Requires Multi-Category Confidence OR Explicit Dual Trait
+        // Requires Multi-Category Confidence OR Explicit Fast-Path Match
         if ((detectionScore >= getDynamicThreshold() && categoryCount >= 2) || isExplicitEngineMatch) {
             lockPage();
         }
     }
 
-    // 🎯 CONFIDENCE ENGINE & INCIDENT CORRELATOR
+    // 🎯 INCIDENT DEDUPLICATION & CORRELATION ENGINE
     function registerIncident(incidentId, confidenceClass, category, isFastPath = false) {
         const now = performance.now();
         
-        // Cooldown Rule: Prevent duplicate score inflation
+        // Cooldown Rule: Prevent duplicated score inflation
         if (cooldownMap.has(incidentId) && (now - cooldownMap.get(incidentId) < 4000)) {
             return;
         }
         cooldownMap.set(incidentId, now);
 
-        const weight = SIGNAL_WEIGHTS[confidenceClass] || 20;
+        const weight = CONFIDENCE_WEIGHTS[confidenceClass] || 20;
         detectionScore += weight;
         if (category) categoriesDetected[category] = true;
         incidentTimeline.set(category, now);
 
-        // 🔗 TEMPORAL CORRELATION: If Network & DOM fail within 1.5 seconds = Strong Bonus
+        // 🔗 TEMPORAL CORRELATION: Network Block + Cosmetic Hiding within 1.5s = Instant AdBlock Proof
         if (incidentTimeline.has("NETWORK") && incidentTimeline.has("DOM_COSMETIC")) {
             const diff = Math.abs(incidentTimeline.get("NETWORK") - incidentTimeline.get("DOM_COSMETIC"));
             if (diff <= 1500) {
-                detectionScore += 40; // High confidence correlation boost
+                detectionScore += 40; // High confidence bonus
             }
         }
 
-        // FAST-PATH: Absolute Proof Lock
+        // FAST-PATH: Absolute Proof Lock (Zero Delay for Explicit Blocker Evidence)
         if (isFastPath && isInitWindowPassed()) {
             performSanityCheckAndLock();
             return;
         }
 
         if (isInitWindowPassed()) {
-            // Micro-Confirmation Window (300ms) before final verdict
             setTimeout(performSanityCheckAndLock, 300);
         }
     }
 
-    // 📉 SCORE DECAY ENGINE (Removes transient network glitches after 10 sec)
+    // 📉 SCORE DECAY ENGINE (Cleans temporary network drops after 10 seconds)
     setInterval(() => {
         const now = performance.now();
         cooldownMap.forEach((time, id) => {
@@ -151,7 +150,6 @@
     function handleNetworkIncident(source) {
         if (!navigator.onLine) return;
         
-        // Micro-confirmation to filter temporary packet drops
         setTimeout(() => {
             if (navigator.onLine) {
                 registerIncident("SINGLE_NETWORK_INCIDENT", "STRONG", "NETWORK");
@@ -159,14 +157,14 @@
         }, 500);
     }
 
-    // Script Error Interceptor
+    // Global Script Error Interceptor
     window.addEventListener("error", function (e) {
         if (e && e.target && (e.target.src || "").match(/googlesyndication|googletagmanager|google-analytics/i)) {
             handleNetworkIncident("script_load_error");
         }
     }, true);
 
-    // 🪤 HoneyTrap / Bait Trap Generator
+    // 🪤 Invisible HoneyTrap / Bait Generator
     function createBaitTrap() {
         let bait = document.getElementById("adsbygoogle-bait");
         if (!bait) {
@@ -188,14 +186,14 @@
                 if (iframe) {
                     const rect = iframe.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0) {
-                        isLegitAdRendered = true; // Increases Threshold dynamically
+                        isLegitAdRendered = true; // Positive Evidence Active
                     }
                 }
             });
         }
     }
 
-    // 🚀 MAIN DETECTION CYCLE
+    // 🚀 FULL-POWER AGGRESSIVE DETECTION CYCLE
     async function runAllChecks() {
         checkRealAdSenseRender();
 
@@ -220,7 +218,7 @@
             registerIncident("opera_trap", "STRONG", "DOM_COSMETIC");
         }
 
-        // 3. Pixel Failure Verification (Weak Signal)
+        // 3. Pixel Load Verification
         const testPixel = new Image();
         testPixel.onerror = () => handleNetworkIncident("pixel_error");
         testPixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?" + Math.random();
@@ -235,7 +233,6 @@
                 const count = (persistenceMap.get("bait_trap") || 0) + 1;
                 persistenceMap.set("bait_trap", count);
                 
-                // Persistence Rule: Must be hidden across 2 checks
                 if (count >= 2) {
                     registerIncident("bait_trap_persistent", "STRONG", "DOM_COSMETIC");
                 }
@@ -257,7 +254,7 @@
             }
         }
 
-        // 6. Network Ping Check (Correlated Request)
+        // 6. Network Ping Check
         try {
             await fetch("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", {
                 method: "HEAD",
@@ -269,9 +266,9 @@
         }
     }
 
-    // ⚡ KERNEL OBSERVERS & FINGERPRINTING
+    // ⚡ KERNEL OBSERVERS & UNBREAKABLE INTERCEPTORS
     (function godModeKernel() {
-        // Explicit Soul Engine Fingerprint
+        // Explicit Soul Engine Detection
         (function detectSoulEngine() {
             let traits = 0;
             const ua = navigator.userAgent.toLowerCase();
@@ -285,7 +282,7 @@
             }
         })();
 
-        // Network Interceptors
+        // Network Interceptors (XHR & Fetch)
         const xhrOpen = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function(method, url) {
             this.addEventListener('error', () => {
@@ -309,7 +306,7 @@
             };
         }
 
-        // Targeted Mutation Observer
+        // Targeted DOM Mutation Observer
         const domObserver = new MutationObserver((mutations) => {
             for (let mutation of mutations) {
                 mutation.removedNodes.forEach(node => {
@@ -322,7 +319,7 @@
         domObserver.observe(document.documentElement, { childList: true, subtree: true });
     })();
 
-    // 💓 Init System Scanner
+    // 💓 Init System
     function initSystem() {
         setTimeout(() => {
             runAllChecks();
