@@ -1,538 +1,1003 @@
 (function () {
     "use strict";
 
-    // ==========================================
-    // ⚙️ CUSTOMIZATION CONFIGURATION
-    // ==========================================
+    // ==========================================================
+    // ⚙️ CONFIGURATION
+    // ==========================================================
     const CONFIG = {
-        logoUrl: "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUFWy8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666",
+        logoUrl:
+            "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUY8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666",
+
         title: "Hey Buddy!",
-        message: "merayour made possible by the support of our readers. To keep our stories free for everyone, please continue reading on a standard browser without active content blockers."
+
+        message:
+            "merayour made possible by the support of our readers. " +
+            "To keep our stories free for everyone, please continue " +
+            "reading on a standard browser without active content blockers."
     };
 
-    // 🛡️ CONFIDENCE CLASSIFICATION & WEIGHT ENGINE
-    const CONFIDENCE_WEIGHTS = {
-        CRITICAL: 90,
-        STRONG: 60,
-        WEAK: 20
+
+    // ==========================================================
+    // 🧠 CONFIDENCE WEIGHTS
+    // ==========================================================
+    const WEIGHTS = {
+        CRITICAL: 80,
+        STRONG: 50,
+        MEDIUM: 30,
+        WEAK: 10
     };
 
+
+    // ==========================================================
+    // 🎯 ENGINE STATE
+    // ==========================================================
     let detectionScore = 0;
-    let isLegitAdRendered = false;
+    let legitAdRendered = false;
+    let pageLocked = false;
 
-    const incidentTimeline = new Map();
-    const persistenceMap = new Map();
-    const cooldownMap = new Map();
+    const incidentMap = new Map();
 
-    const categoriesDetected = {
+    const evidenceMap = {
+        NETWORK: new Set(),
+        DOM_COSMETIC: new Set(),
+        BROWSER_ENGINE: new Set()
+    };
+
+    const categoryState = {
         NETWORK: false,
         DOM_COSMETIC: false,
         BROWSER_ENGINE: false
     };
 
-    const isInitWindowPassed = () => performance.now() > 2500;
 
-    // 🔰 STANDARD BROWSER BASELINE
-    const ua = navigator.userAgent.toLowerCase();
+    // ==========================================================
+    // ⏱️ TIMING / SAFETY
+    // ==========================================================
+    const INITIAL_GRACE = 3500;
+    const INCIDENT_TTL = 12000;
+    const INCIDENT_COOLDOWN = 7000;
 
-    const isStandardChrome =
-        (window.chrome || window.navigator.vendor.includes("Google")) &&
-        !ua.includes("soul") &&
-        !ua.includes("opera") &&
-        !ua.includes("opr") &&
-        !window.soul &&
-        !window.__soul_ext__;
+    const nowReady = () =>
+        performance.now() >= INITIAL_GRACE;
 
-    function getDynamicThreshold() {
-        let base = isStandardChrome ? 90 : 70;
-        return isLegitAdRendered ? base + 50 : base; // Ad, Render होने पर Threshhold बढ़ा दिया
+
+    // ==========================================================
+    // 🌐 BROWSER CLASSIFICATION
+    // ==========================================================
+    const ua =
+        (navigator.userAgent || "").toLowerCase();
+
+    const vendor =
+        (navigator.vendor || "").toLowerCase();
+
+    const browser = {
+
+        soul:
+            ua.includes("soul") ||
+            !!window.soul ||
+            !!window.__soul_ext__,
+
+        brave:
+            !!(
+                navigator.brave &&
+                typeof navigator.brave.isBrave === "function"
+            ),
+
+        opera:
+            ua.includes("opera") ||
+            ua.includes("opr/"),
+
+        chrome:
+            !!window.chrome &&
+            vendor.includes("google"),
+
+        edge:
+            ua.includes("edg/"),
+
+        firefox:
+            ua.includes("firefox"),
+
+        safari:
+            /safari/.test(ua) &&
+            !/chrome|crios|android/.test(ua)
+    };
+
+
+    const knownStandardBrowser =
+        browser.chrome ||
+        browser.edge ||
+        browser.firefox ||
+        browser.safari;
+
+
+    // ==========================================================
+    // 🎚️ BALANCED THRESHOLD
+    // ==========================================================
+    function getThreshold() {
+
+        /*
+         * Standard browsers receive a safety buffer.
+         *
+         * No browser fingerprint can lock by itself.
+         */
+
+        if (knownStandardBrowser) {
+
+            return legitAdRendered
+                ? 145
+                : 100;
+        }
+
+        return legitAdRendered
+            ? 155
+            : 110;
     }
 
-    // 🔒 FULL-PAGE OVERLAY INJECTOR
-    function lockPage() {
-        if (document.getElementById("ag-lock-overlay")) return;
 
-        const style = document.createElement("style");
+    // ==========================================================
+    // 🧹 STATE DECAY
+    // ==========================================================
+    setInterval(() => {
 
-        style.textContent = `
-            html, body {
-                overflow: hidden !important;
-                height: 100% !important;
+        const now = performance.now();
+
+        incidentMap.forEach((timestamp, id) => {
+
+            if (now - timestamp > INCIDENT_TTL) {
+                incidentMap.delete(id);
             }
 
+        });
+
+        /*
+         * Slow score decay prevents a temporary
+         * network failure from becoming permanent.
+         */
+        if (detectionScore > 0) {
+
+            detectionScore =
+                Math.max(
+                    0,
+                    detectionScore - 10
+                );
+        }
+
+    }, 4000);
+
+
+    // ==========================================================
+    // ⭐ POSITIVE LEGITIMATE AD EVIDENCE
+    // ==========================================================
+    function checkRealAdRender() {
+
+        const ads =
+            document.querySelectorAll(".adsbygoogle");
+
+        let rendered = false;
+
+        ads.forEach(ad => {
+
+            const iframe =
+                ad.querySelector("iframe");
+
+            if (!iframe) return;
+
+            const rect =
+                iframe.getBoundingClientRect();
+
+            if (
+                rect.width > 0 &&
+                rect.height > 0
+            ) {
+                rendered = true;
+            }
+
+        });
+
+
+        if (rendered) {
+
+            legitAdRendered = true;
+
+            /*
+             * Positive evidence clears
+             * accumulated suspicion.
+             */
+            detectionScore = 0;
+
+            incidentMap.clear();
+
+            Object.keys(categoryState)
+                .forEach(key => {
+                    categoryState[key] = false;
+                });
+
+            Object.keys(evidenceMap)
+                .forEach(key => {
+                    evidenceMap[key].clear();
+                });
+        }
+
+
+        return rendered;
+    }
+
+
+    // ==========================================================
+    // 🔒 LOCK PAGE
+    // ==========================================================
+    function lockPage() {
+
+        if (pageLocked) return;
+
+        if (legitAdRendered) return;
+
+        pageLocked = true;
+
+
+        // ------------------------------------------------------
+        // 🛑 ANTI-TEXT / READER MODE CONTENT SANITIZATION
+        // ------------------------------------------------------
+        const mainContent =
+            document.querySelector(
+                "article, .post-body, .entry-content, main, #main-content"
+            );
+
+        if (mainContent) {
+
+            mainContent.innerHTML = `
+                <div style="
+                    padding:30px;
+                    text-align:center;
+                    color:#fff;
+                ">
+                    <h3>Content Restricted</h3>
+                    <p>
+                        Please disable AdBlocker and refresh
+                        the page to view this content.
+                    </p>
+                </div>
+            `;
+        }
+
+
+        if (
+            document.getElementById(
+                "ag-lock-overlay"
+            )
+        ) {
+            return;
+        }
+
+
+        // ------------------------------------------------------
+        // 🎨 LOCK SCREEN STYLE
+        // ------------------------------------------------------
+        const style =
+            document.createElement("style");
+
+        style.textContent = `
+
+            html,
+            body {
+
+                overflow: hidden !important;
+                height: 100% !important;
+
+                -webkit-user-select: none !important;
+                -moz-user-select: none !important;
+                -ms-user-select: none !important;
+                user-select: none !important;
+            }
+
+
             #ag-lock-overlay {
+
                 position: fixed;
-                top: 0;
-                left: 0;
+                inset: 0;
+
                 width: 100vw;
                 height: 100vh;
-                background-color: #0d1117;
-                color: #ffffff;
+
+                background: #0d1117;
+                color: #fff;
+
                 z-index: 2147483647;
+
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-family: system-ui, -apple-system, BlinkMacSystemFont,
-                    "Segoe UI", Roboto, sans-serif;
-                text-align: center;
+
                 padding: 20px;
                 box-sizing: border-box;
+
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Roboto,
+                    sans-serif;
+
+                text-align: center;
             }
 
+
             .ag-card {
-                background: #161b22;
-                border: 1px solid #30363d;
-                border-radius: 12px;
-                padding: 32px 24px;
-                max-width: 400px;
+
                 width: 100%;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                max-width: 400px;
+
+                padding: 32px 24px;
+
+                background: #161b22;
+
+                border:
+                    1px solid #30363d;
+
+                border-radius: 12px;
+
+                box-shadow:
+                    0 10px 25px
+                    rgba(0,0,0,.5);
+
                 box-sizing: border-box;
             }
 
+
             .ag-logo {
+
                 max-width: 80px;
                 max-height: 80px;
+
                 margin-bottom: 16px;
+
                 border-radius: 8px;
+
                 object-fit: contain;
             }
 
+
             #ag-lock-overlay h1 {
+
+                margin: 0 0 12px;
+
                 font-size: 22px;
-                margin: 0 0 12px 0;
+
                 color: #f0f6fc;
+
                 font-weight: 600;
             }
+
 
             #ag-lock-overlay p {
+
+                margin: 0 0 22px;
+
                 font-size: 14px;
+
                 color: #8b949e;
+
                 line-height: 1.6;
-                margin: 0 0 22px 0;
             }
 
-            /* ⚫⚪ BLACK & WHITE REFRESH BUTTON */
+
             .ag-refresh-btn {
+
                 appearance: none;
-                -webkit-appearance: none;
-                border: 1px solid #ffffff;
-                background: #ffffff;
-                color: #000000;
+
+                border: 1px solid #fff;
+
+                background: #fff;
+
+                color: #000;
+
                 padding: 11px 24px;
-                border-radius: 7px;
-                font-size: 14px;
-                font-weight: 600;
-                font-family: inherit;
-                cursor: pointer;
+
                 min-width: 120px;
-                transition:
-                    background-color 0.15s ease,
-                    color 0.15s ease,
-                    transform 0.15s ease;
+
+                border-radius: 7px;
+
+                font:
+                    600 14px system-ui;
+
+                cursor: pointer;
+
+                transition: .15s ease;
             }
+
 
             .ag-refresh-btn:hover {
-                background: #000000;
-                color: #ffffff;
+
+                background: #000;
+                color: #fff;
             }
+
 
             .ag-refresh-btn:active {
-                transform: scale(0.97);
+
+                transform: scale(.97);
             }
 
+
             .ag-refresh-btn:focus-visible {
-                outline: 2px solid #ffffff;
+
+                outline:
+                    2px solid #fff;
+
                 outline-offset: 3px;
             }
         `;
 
         document.head.appendChild(style);
 
-        const overlay = document.createElement("div");
-        overlay.id = "ag-lock-overlay";
 
-        const logoHTML = CONFIG.logoUrl
-            ? `<img src="${CONFIG.logoUrl}" alt="Logo" class="ag-logo"
-                onerror="this.style.display='none'">`
-            : "";
+        // ------------------------------------------------------
+        // 🛑 READER META SIGNAL
+        // ------------------------------------------------------
+        if (
+            !document.querySelector(
+                'meta[name="reader"]'
+            )
+        ) {
+
+            const metaReader =
+                document.createElement("meta");
+
+            metaReader.name = "reader";
+            metaReader.content = "no-reader-mode";
+
+            document.head.appendChild(metaReader);
+        }
+
+
+        // ------------------------------------------------------
+        // 🚫 OVERLAY
+        // ------------------------------------------------------
+        const overlay =
+            document.createElement("div");
+
+        overlay.id =
+            "ag-lock-overlay";
+
+
+        const logo =
+            CONFIG.logoUrl
+                ? `
+                    <img
+                        src="${CONFIG.logoUrl}"
+                        alt="Logo"
+                        class="ag-logo"
+                        onerror="this.style.display='none'"
+                    >
+                  `
+                : "";
+
 
         overlay.innerHTML = `
+
             <div class="ag-card">
-                ${logoHTML}
 
-                <h1>${CONFIG.title}</h1>
+                ${logo}
 
-                <p>${CONFIG.message}</p>
+                <h1>
+                    ${CONFIG.title}
+                </h1>
+
+                <p>
+                    ${CONFIG.message}
+                </p>
 
                 <button
                     type="button"
                     class="ag-refresh-btn"
-                    id="ag-refresh-btn"
-                    aria-label="Refresh page">
+                    id="ag-refresh-btn">
+
                     Refresh
+
                 </button>
+
             </div>
         `;
 
-        (document.body || document.documentElement).appendChild(overlay);
 
-        // 🔄 REFRESH BUTTON
-        const refreshButton = document.getElementById("ag-refresh-btn");
+        (
+            document.body ||
+            document.documentElement
+        ).appendChild(overlay);
 
-        if (refreshButton) {
-            refreshButton.addEventListener("click", function () {
-                refreshButton.disabled = true;
-                refreshButton.textContent = "Refreshing...";
 
-                window.location.reload();
-            });
+        const button =
+            document.getElementById(
+                "ag-refresh-btn"
+            );
+
+
+        if (button) {
+
+            button.addEventListener(
+                "click",
+                () => {
+
+                    button.disabled = true;
+
+                    button.textContent =
+                        "Refreshing...";
+
+                    window.location.reload();
+                }
+            );
         }
     }
 
-    // 🛑 FINAL SANITY CHECK (UPGRADED TO PREVENT REVENUE LOSS)
-    function performSanityCheckAndLock() {
+
+    // ==========================================================
+    // 🧠 FINAL DECISION ENGINE
+    // ==========================================================
+    function evaluate() {
+
+        if (pageLocked) return;
+
         if (!navigator.onLine) return;
-        if (document.readyState === "loading") return;
-
-        // 🔥 SAFEGUARD: अगर AdSense रेंडर हो गया है, तो कभी लॉक मत करो
-        if (isLegitAdRendered) return;
-
-        const categoryCount =
-            Object.values(categoriesDetected).filter(Boolean).length;
-
-        const isExplicitEngineMatch =
-            categoriesDetected.BROWSER_ENGINE &&
-            categoriesDetected.DOM_COSMETIC;
 
         if (
-            (detectionScore >= getDynamicThreshold() && categoryCount >= 2) ||
-            isExplicitEngineMatch
+            document.readyState === "loading"
         ) {
+            return;
+        }
+
+
+        // ⭐ Positive evidence always wins.
+        if (checkRealAdRender()) {
+            return;
+        }
+
+
+        if (!nowReady()) return;
+
+
+        const categoryCount =
+            Object.values(categoryState)
+                .filter(Boolean)
+                .length;
+
+
+        const networkEvidence =
+            evidenceMap.NETWORK.size;
+
+        const cosmeticEvidence =
+            evidenceMap.DOM_COSMETIC.size;
+
+        const browserEvidence =
+            evidenceMap.BROWSER_ENGINE.size;
+
+
+        /*
+         * ======================================================
+         * BALANCED CORRELATION
+         * ======================================================
+         *
+         * Network alone:
+         *     NEVER enough.
+         *
+         * Browser alone:
+         *     NEVER enough.
+         *
+         * DOM cosmetic alone:
+         *     NEVER enough.
+         *
+         * Network + DOM:
+         *     primary high-confidence route.
+         *
+         * Browser + Network + DOM:
+         *     strongest route.
+         */
+
+        const networkAndDOM =
+            networkEvidence > 0 &&
+            cosmeticEvidence > 0;
+
+
+        const fullCorrelation =
+            browserEvidence > 0 &&
+            networkEvidence > 0 &&
+            cosmeticEvidence > 0;
+
+
+        /*
+         * Require high score + independent evidence.
+         */
+        if (
+            detectionScore >= getThreshold() &&
+            categoryCount >= 2 &&
+            (
+                networkAndDOM ||
+                fullCorrelation
+            )
+        ) {
+
             lockPage();
         }
     }
 
-    // 🎯 INCIDENT DEDUPLICATION & CORRELATION ENGINE
-    function registerIncident(
-        incidentId,
-        confidenceClass,
-        category,
-        isFastPath = false
-    ) {
-        const now = performance.now();
 
+    // ==========================================================
+    // 🎯 INCIDENT REGISTRATION
+    // ==========================================================
+    function registerIncident(
+        id,
+        confidence,
+        category,
+        source
+    ) {
+
+        if (!category) return;
+
+
+        const now =
+            performance.now();
+
+
+        /*
+         * Deduplication.
+         */
         if (
-            cooldownMap.has(incidentId) &&
-            now - cooldownMap.get(incidentId) < 4000
+            incidentMap.has(id) &&
+            now -
+                incidentMap.get(id)
+                < INCIDENT_COOLDOWN
         ) {
             return;
         }
 
-        cooldownMap.set(incidentId, now);
+
+        incidentMap.set(
+            id,
+            now
+        );
+
 
         const weight =
-            CONFIDENCE_WEIGHTS[confidenceClass] || 20;
+            WEIGHTS[confidence] ||
+            WEIGHTS.WEAK;
+
 
         detectionScore += weight;
 
-        if (category) {
-            categoriesDetected[category] = true;
-        }
 
-        incidentTimeline.set(category, now);
+        categoryState[category] =
+            true;
 
-        // 🔗 TEMPORAL CORRELATION
+
+        evidenceMap[category].add(
+            source || id
+        );
+
+
+        /*
+         * Network + DOM correlation.
+         */
         if (
-            incidentTimeline.has("NETWORK") &&
-            incidentTimeline.has("DOM_COSMETIC")
+            evidenceMap.NETWORK.size > 0 &&
+            evidenceMap.DOM_COSMETIC.size > 0
         ) {
-            const diff = Math.abs(
-                incidentTimeline.get("NETWORK") -
-                incidentTimeline.get("DOM_COSMETIC")
-            );
 
-            if (diff <= 1500) {
-                detectionScore += 40;
-            }
+            detectionScore += 25;
         }
 
-        // ⚡ FAST PATH
-        if (isFastPath && isInitWindowPassed()) {
-            performSanityCheckAndLock();
+
+        /*
+         * Browser + Network + DOM.
+         */
+        if (
+            evidenceMap.BROWSER_ENGINE.size > 0 &&
+            evidenceMap.NETWORK.size > 0 &&
+            evidenceMap.DOM_COSMETIC.size > 0
+        ) {
+
+            detectionScore += 20;
+        }
+
+
+        /*
+         * Never lock synchronously from
+         * a single incident.
+         */
+        setTimeout(
+            evaluate,
+            300
+        );
+    }
+
+
+    // ==========================================================
+    // 🌐 NETWORK INCIDENT
+    // ==========================================================
+    function networkIncident(source) {
+
+        if (!navigator.onLine) {
             return;
         }
 
-        if (isInitWindowPassed()) {
-            setTimeout(performSanityCheckAndLock, 300);
-        }
-    }
 
-    // 📉 SCORE DECAY ENGINE (AUTO RESET OLD ERRORS)
-    setInterval(() => {
-        const now = performance.now();
-
-        cooldownMap.forEach((time, id) => {
-            if (now - time > 8000) {
-                cooldownMap.delete(id);
-            }
-        });
-
-        // धीरे-धीरे डिटेक्शन स्कोर कम करना ताकि AdBlock बंद होने पर स्क्रीन अनलॉक का मौका मिले
-        if (detectionScore > 0) {
-            detectionScore = Math.max(0, detectionScore - 15);
-        }
-    }, 4000);
-
-    // 🌐 NETWORK INCIDENT DEDUPLICATION
-    function handleNetworkIncident(source) {
-        if (!navigator.onLine) return;
-
+        /*
+         * Confirmation delay.
+         */
         setTimeout(() => {
-            if (navigator.onLine) {
-                registerIncident(
-                    "SINGLE_NETWORK_INCIDENT",
-                    "STRONG",
-                    "NETWORK"
-                );
+
+            if (!navigator.onLine) {
+                return;
             }
-        }, 500);
+
+
+            registerIncident(
+                "network:" + source,
+                "MEDIUM",
+                "NETWORK",
+                source
+            );
+
+        }, 700);
     }
 
-    // Global Script Error Interceptor
-    window.addEventListener(
-        "error",
-        function (e) {
-            if (
-                e &&
-                e.target &&
-                (e.target.src || "").match(
-                    /googlesyndication|googletagmanager|google-analytics/i
-                )
-            ) {
-                handleNetworkIncident("script_load_error");
-            }
-        },
-        true
-    );
 
-    // 🪤 INVISIBLE HONEYTRAP
-    function createBaitTrap() {
+    // ==========================================================
+    // 🪤 AD BAIT
+    // ==========================================================
+    function createBait() {
+
         let bait =
-            document.getElementById("adsbygoogle-bait");
+            document.getElementById(
+                "ag-ad-bait"
+            );
 
-        if (!bait) {
-            bait = document.createElement("div");
 
-            bait.id = "adsbygoogle-bait";
-
-            bait.className =
-                "adsbygoogle ad-banner ad-unit google-ad pub_300x250";
-
-            bait.style.cssText =
-                "width:1px!important;" +
-                "height:1px!important;" +
-                "position:absolute!important;" +
-                "left:-9999px!important;" +
-                "top:-9999px!important;" +
-                "opacity:0.01!important;";
-
-            (document.body ||
-                document.documentElement).appendChild(bait);
+        if (bait) {
+            return bait;
         }
+
+
+        bait =
+            document.createElement(
+                "div"
+            );
+
+
+        bait.id =
+            "ag-ad-bait";
+
+
+        bait.className =
+            "adsbygoogle ad-banner ad-unit google-ad";
+
+
+        bait.style.cssText =
+            "width:1px!important;" +
+            "height:1px!important;" +
+            "position:absolute!important;" +
+            "left:-9999px!important;" +
+            "top:-9999px!important;" +
+            "opacity:0.01!important;";
+
+
+        (
+            document.body ||
+            document.documentElement
+        ).appendChild(bait);
+
 
         return bait;
     }
 
-    // 📦 LEGITIMATE AD RENDER CHECK (UPGRADED FOR AUTO RESET)
-    function checkRealAdSenseRender() {
-        const adContainers =
-            document.querySelectorAll(".adsbygoogle");
 
-        let renderedCount = 0;
+    // ==========================================================
+    // 🎨 COSMETIC DETECTION
+    // ==========================================================
+    function checkCosmetic() {
 
-        if (adContainers.length > 0) {
-            adContainers.forEach(container => {
-                const iframe =
-                    container.querySelector(
-                        'iframe[id^="aswft_"]'
-                    );
+        const bait =
+            createBait();
 
-                if (iframe) {
-                    const rect =
-                        iframe.getBoundingClientRect();
 
-                    if (
-                        rect.width > 0 &&
-                        rect.height > 0
-                    ) {
-                        renderedCount++;
-                    }
-                }
-            });
-        }
+        if (!bait) return;
 
-        if (renderedCount > 0) {
-            isLegitAdRendered = true;
-            detectionScore = 0; // 🔥 Ads रेंडर होते ही सारा स्कोर शून्य (RESET)
-            categoriesDetected.NETWORK = false;
-            categoriesDetected.DOM_COSMETIC = false;
-            categoriesDetected.BROWSER_ENGINE = false;
+
+        const style =
+            window.getComputedStyle(
+                bait
+            );
+
+
+        const hidden =
+            style.display === "none" ||
+            style.visibility === "hidden" ||
+            bait.offsetHeight === 0;
+
+
+        if (hidden) {
+
+            const hits =
+                parseInt(
+                    bait.dataset.hits || "0",
+                    10
+                ) + 1;
+
+
+            bait.dataset.hits =
+                String(hits);
+
+
+            /*
+             * Persistent hiding required.
+             */
+            if (hits >= 2) {
+
+                registerIncident(
+                    "cosmetic:persistent-bait",
+                    "STRONG",
+                    "DOM_COSMETIC",
+                    "persistent_bait"
+                );
+            }
+
         } else {
-            isLegitAdRendered = false;
+
+            bait.dataset.hits = "0";
         }
     }
 
-    // 🚀 FULL-POWER DETECTION CYCLE
-    async function runAllChecks() {
 
-        checkRealAdSenseRender();
+    // ==========================================================
+    // 🧬 BROWSER SIGNALS
+    // ==========================================================
+    function checkBrowserSignals() {
 
-        // 1. Soul Browser Anti-Stub Check
-        const isFakeGtag =
-            typeof window.gtag === "function" &&
-            typeof window.google_tag_data === "undefined";
+        let score = 0;
 
-        const isAdsByGoogleStubbed =
-            Array.isArray(window.adsbygoogle) &&
-            window.adsbygoogle.loaded !== true &&
-            window.adsbygoogle.length > 0;
 
+        /*
+         * Soul UA = supporting signal.
+         */
+        if (browser.soul) {
+            score += 30;
+        }
+
+
+        /*
+         * Explicit Soul environment trace.
+         */
         if (
-            isFakeGtag ||
-            isAdsByGoogleStubbed
+            window.soul ||
+            window.__soul_ext__ ||
+            (
+                window.external &&
+                "Soul" in window.external
+            )
         ) {
-            registerIncident(
-                "anti_stub_trap",
-                "CRITICAL",
-                "BROWSER_ENGINE",
-                true
-            );
+
+            score += 40;
         }
 
-        // 2. Opera Native Adblock Trap
-        const operaTrap =
-            document.createElement("div");
 
-        operaTrap.className =
-            "ad-zone ad_box google_adsense";
+        /*
+         * Brave API is only supporting evidence.
+         */
+        if (browser.brave) {
+            score += 15;
+        }
 
-        operaTrap.style.cssText =
-            "width:10px!important;" +
-            "height:10px!important;" +
-            "position:absolute!important;" +
-            "left:-9999px!important;";
 
-        (document.body ||
-            document.documentElement).appendChild(
-                operaTrap
-            );
+        /*
+         * Browser evidence NEVER locks alone.
+         */
+        if (score >= 60) {
 
-        const isOperaBlocking =
-            window.getComputedStyle(
-                operaTrap
-            ).display === "none" ||
-            operaTrap.offsetHeight === 0;
-
-        operaTrap.remove();
-
-        if (isOperaBlocking) {
             registerIncident(
-                "opera_trap",
+                "browser:strong-trace",
                 "STRONG",
-                "DOM_COSMETIC"
+                "BROWSER_ENGINE",
+                "browser_strong"
+            );
+
+        } else if (score >= 30) {
+
+            registerIncident(
+                "browser:weak-trace",
+                "WEAK",
+                "BROWSER_ENGINE",
+                "browser_weak"
             );
         }
+    }
 
-        // 3. Pixel Load Verification
-        const testPixel = new Image();
 
-        testPixel.onerror = () =>
-            handleNetworkIncident("pixel_error");
+    // ==========================================================
+    // 📦 AD STATE INSPECTION
+    // ==========================================================
+    function inspectAdState() {
 
-        testPixel.src =
-            "https://pagead2.googlesyndication.com/pagead/img/0.gif?" +
-            Math.random();
-
-        // 4. Persistent Cosmetic Hiding
-        const bait = createBaitTrap();
-
-        if (bait) {
-            const style =
-                window.getComputedStyle(bait);
-
-            const isHidden =
-                style.display === "none" ||
-                style.visibility === "hidden" ||
-                bait.offsetHeight === 0;
-
-            if (isHidden) {
-
-                const count =
-                    (persistenceMap.get(
-                        "bait_trap"
-                    ) || 0) + 1;
-
-                persistenceMap.set(
-                    "bait_trap",
-                    count
-                );
-
-                if (count >= 1) { // 🔥 Extension को तुरंत पकड़ने के लिए Threshold 1 किया
-                    registerIncident(
-                        "bait_trap_persistent",
-                        "STRONG",
-                        "DOM_COSMETIC"
-                    );
-                }
-
-            } else {
-                persistenceMap.set(
-                    "bait_trap",
-                    0
-                );
-            }
-        }
-
-        // 5. Unfilled Status Inspector
-        const activeAdIns =
+        const ad =
             document.querySelector(
-                "ins.adsbygoogle[data-ad-status]"
+                "ins.adsbygoogle"
             );
 
-        if (activeAdIns) {
 
-            const hasIframe =
-                activeAdIns.querySelector("iframe");
+        if (!ad) return;
 
-            const isUnfilled =
-                activeAdIns.getAttribute(
-                    "data-ad-status"
-                ) === "unfilled";
 
-            const style =
-                window.getComputedStyle(
-                    activeAdIns
-                );
+        const iframe =
+            ad.querySelector(
+                "iframe"
+            );
 
-            if (hasIframe) {
-                isLegitAdRendered = true;
-            }
+
+        if (iframe) {
+
+            const rect =
+                iframe.getBoundingClientRect();
+
 
             if (
-                !hasIframe &&
-                style.display === "none" &&
-                !isUnfilled
+                rect.width > 0 &&
+                rect.height > 0
             ) {
-                registerIncident(
-                    "ins_ad_hidden",
-                    "WEAK",
-                    "DOM_COSMETIC"
-                );
+
+                legitAdRendered = true;
+
+                detectionScore = 0;
+
+                return;
             }
         }
 
-        // 6. Network Ping Check
+
+        /*
+         * Unfilled ad is neutral.
+         */
+        if (
+            ad.getAttribute(
+                "data-ad-status"
+            ) === "unfilled"
+        ) {
+
+            return;
+        }
+    }
+
+
+    // ==========================================================
+    // 🌐 NETWORK PIXEL
+    // ==========================================================
+    function runPixelTest() {
+
+        const pixel =
+            new Image();
+
+
+        pixel.onload =
+            () => {};
+
+
+        pixel.onerror =
+            () => {
+
+                networkIncident(
+                    "pixel"
+                );
+            };
+
+
+        pixel.src =
+            "https://pagead2.googlesyndication.com/pagead/img/0.gif?" +
+            Date.now();
+    }
+
+
+    // ==========================================================
+    // 🌐 NETWORK FETCH
+    // ==========================================================
+    async function runFetchTest() {
+
         try {
 
             await fetch(
@@ -544,153 +1009,206 @@
                 }
             );
 
-        } catch (err) {
+        } catch (error) {
 
-            handleNetworkIncident(
-                "fetch_ping_error"
+            networkIncident(
+                "fetch"
             );
         }
     }
 
-    // ⚡ KERNEL OBSERVERS & INTERCEPTORS
-    (function godModeKernel() {
 
-        // Explicit Soul Engine Detection
-        (function detectSoulEngine() {
-
-            let traits = 0;
-
-            const ua =
-                navigator.userAgent.toLowerCase();
-
-            if (ua.includes("soul")) {
-                traits += 40;
-            }
+    // ==========================================================
+    // 🚨 SCRIPT ERROR INTERCEPTOR
+    // ==========================================================
+    window.addEventListener(
+        "error",
+        function (event) {
 
             if (
-                window.soul ||
-                window.__soul_ext__ ||
-                (
-                    window.external &&
-                    "Soul" in window.external
-                )
+                !event ||
+                !event.target
             ) {
-                traits += 60;
+                return;
             }
 
-            if (traits >= 80) {
 
-                registerIncident(
-                    "soul_engine_traits",
-                    "CRITICAL",
-                    "BROWSER_ENGINE",
-                    true
+            const src =
+                event.target.src ||
+                "";
+
+
+            if (
+                /googlesyndication|pagead2/i
+                    .test(src)
+            ) {
+
+                networkIncident(
+                    "script"
                 );
             }
 
-        })();
+        },
+        true
+    );
 
-        // Network Interceptors — XHR
-        const xhrOpen =
+
+    // ==========================================================
+    // ⚡ XHR INTERCEPTOR
+    // ==========================================================
+    (function installXHR() {
+
+        const originalOpen =
             XMLHttpRequest.prototype.open;
 
+
         XMLHttpRequest.prototype.open =
-            function (method, url) {
+            function (
+                method,
+                url
+            ) {
 
                 this.addEventListener(
                     "error",
                     () => {
 
                         if (
-                            typeof url === "string" &&
-                            (
-                                url.includes("pagead2") ||
-                                url.includes("googlesyndication")
-                            )
+                            typeof url !==
+                                "string"
                         ) {
-                            handleNetworkIncident(
-                                "xhr_error"
+                            return;
+                        }
+
+
+                        if (
+                            /pagead2|googlesyndication/i
+                                .test(url)
+                        ) {
+
+                            networkIncident(
+                                "xhr"
                             );
                         }
 
                     }
                 );
 
-                return xhrOpen.apply(
+
+                return originalOpen.apply(
                     this,
                     arguments
                 );
             };
 
-        // Network Interceptor — Fetch
-        if (window.fetch) {
+    })();
 
-            const nativeFetch =
-                window.fetch;
 
-            window.fetch =
-                function (...args) {
+    // ==========================================================
+    // ⚡ FETCH INTERCEPTOR
+    // ==========================================================
+    (function installFetchInterceptor() {
 
-                    const url =
-                        typeof args[0] === "string"
-                            ? args[0]
-                            : args[0]?.url || "";
-
-                    return nativeFetch
-                        .apply(this, args)
-                        .catch(err => {
-
-                            if (
-                                url.includes("pagead2") ||
-                                url.includes(
-                                    "googlesyndication"
-                                )
-                            ) {
-                                handleNetworkIncident(
-                                    "fetch_error"
-                                );
-                            }
-
-                            throw err;
-                        });
-                };
+        if (!window.fetch) {
+            return;
         }
 
-        // Targeted Mutation Observer
-        const domObserver =
+
+        const originalFetch =
+            window.fetch;
+
+
+        window.fetch =
+            function (...args) {
+
+                const url =
+                    typeof args[0] ===
+                        "string"
+                        ? args[0]
+                        : args[0]?.url ||
+                          "";
+
+
+                return originalFetch
+                    .apply(
+                        this,
+                        args
+                    )
+                    .catch(error => {
+
+                        if (
+                            /pagead2|googlesyndication/i
+                                .test(url)
+                        ) {
+
+                            networkIncident(
+                                "fetch-interceptor"
+                            );
+                        }
+
+
+                        throw error;
+                    });
+
+            };
+
+    })();
+
+
+    // ==========================================================
+    // 👀 TARGETED DOM OBSERVER
+    // ==========================================================
+    (function installDOMObserver() {
+
+        const observer =
             new MutationObserver(
                 mutations => {
 
-                    for (
-                        let mutation of mutations
-                    ) {
+                    mutations.forEach(
+                        mutation => {
 
-                        mutation.removedNodes
-                            .forEach(node => {
+                            mutation
+                                .removedNodes
+                                .forEach(
+                                    node => {
 
-                                if (
-                                    node.nodeType === 1 &&
-                                    (
-                                        node.classList?.contains(
-                                            "adsbygoogle"
-                                        ) ||
-                                        node.tagName === "INS"
-                                    )
-                                ) {
+                                        if (
+                                            node.nodeType !==
+                                                1
+                                        ) {
+                                            return;
+                                        }
 
-                                    registerIncident(
-                                        "ad_dom_removal",
-                                        "STRONG",
-                                        "DOM_COSMETIC"
-                                    );
-                                }
 
-                            });
-                    }
+                                        const removedAd =
+                                            node.classList?.contains(
+                                                "adsbygoogle"
+                                            ) ||
+                                            node.tagName ===
+                                                "INS";
+
+
+                                        if (
+                                            removedAd
+                                        ) {
+
+                                            registerIncident(
+                                                "dom:removed-ad",
+                                                "STRONG",
+                                                "DOM_COSMETIC",
+                                                "ad_removal"
+                                            );
+                                        }
+
+                                    }
+                                );
+                        }
+                    );
+
                 }
             );
 
-        domObserver.observe(
+
+        observer.observe(
             document.documentElement,
             {
                 childList: true,
@@ -700,33 +1218,82 @@
 
     })();
 
-    // 💓 INIT SYSTEM
-    function initSystem() {
+
+    // ==========================================================
+    // 🔄 MAIN CHECK CYCLE
+    // ==========================================================
+    async function runAllChecks() {
+
+        if (pageLocked) return;
+
+
+        /*
+         * Positive evidence first.
+         */
+        if (checkRealAdRender()) {
+            return;
+        }
+
+
+        inspectAdState();
+
+
+        if (legitAdRendered) {
+            return;
+        }
+
+
+        checkBrowserSignals();
+
+        checkCosmetic();
+
+        runPixelTest();
+
+        await runFetchTest();
+
+        evaluate();
+    }
+
+
+    // ==========================================================
+    // 💓 INITIALIZATION
+    // ==========================================================
+    function init() {
 
         setTimeout(() => {
 
             runAllChecks();
 
+
+            /*
+             * Balanced 2.5 second cycle.
+             */
             setInterval(
                 runAllChecks,
-                2000
+                2500
             );
 
-        }, 1500);
+        }, 2200);
     }
 
+
+    // ==========================================================
+    // 🚀 START
+    // ==========================================================
     if (
-        document.readyState === "loading"
+        document.readyState ===
+        "loading"
     ) {
 
         document.addEventListener(
             "DOMContentLoaded",
-            initSystem
+            init,
+            { once: true }
         );
 
     } else {
 
-        initSystem();
+        init();
     }
 
 })();
