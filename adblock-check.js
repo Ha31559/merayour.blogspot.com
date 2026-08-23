@@ -111,49 +111,56 @@
         const adContainers = document.querySelectorAll('.adsbygoogle');
         if (adContainers.length > 0) {
             let isAnyAdLoaded = false;
+            let hasAnyIframe = false;
             adContainers.forEach(container => {
                 const iframe = container.querySelector('iframe[id^="aswft_"]');
                 if (iframe) {
+                    hasAnyIframe = true;
                     const rect = iframe.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0) {
                         isAnyAdLoaded = true;
                     }
                 }
             });
-            if (!isAnyAdLoaded) return true;
+            // Tune: Only lock if iframes exist but are forced 0px by blockers
+            if (hasAnyIframe && !isAnyAdLoaded) return true;
         }
         return false;
     }
 
     // 🚀 [ALL VERSIONS COMBINED] Comprehensive Deep Check System
     async function runAllChecks() {
-                // 🔥 SOUL BROWSER ANTI-STUB CHECK
+        // 🔥 SOUL BROWSER ANTI-STUB CHECK
         const isFakeGtag = typeof window.gtag === "function" && typeof window.google_tag_data === "undefined";
-        const isAdsByGoogleStubbed = Array.isArray(window.adsbygoogle) && window.adsbygoogle.loaded !== true;
+        const isAdsByGoogleStubbed = Array.isArray(window.adsbygoogle) && window.adsbygoogle.loaded !== true && window.adsbygoogle.length > 0;
 
         if (isFakeGtag || isAdsByGoogleStubbed) {
             lockPage();
             return;
         }
-// 🎭 1. Opera Native Adblock Hiding Trap (Opera विशिष्ट CSS फ़िल्टर)
-const operaTrap = document.createElement("div");
-operaTrap.className = "ad-zone ad_box google_adsense";
-operaTrap.style.cssText = "width:10px!important;height:10px!important;position:absolute!important;left:-9999px!important;";
-(document.body || document.documentElement).appendChild(operaTrap);
 
-const isOperaBlocking = window.getComputedStyle(operaTrap).display === "none" || operaTrap.offsetHeight === 0;
-operaTrap.remove();
+        // 🎭 1. Opera Native Adblock Hiding Trap (Opera विशिष्ट CSS फ़िल्टर)
+        const operaTrap = document.createElement("div");
+        operaTrap.className = "ad-zone ad_box google_adsense";
+        operaTrap.style.cssText = "width:10px!important;height:10px!important;position:absolute!important;left:-9999px!important;";
+        (document.body || document.documentElement).appendChild(operaTrap);
 
-// 🕵️ 2. Real Image/Pixel Load Verification (Soul & Opera दोनों का नेटवर्क ब्लॉकर)
-let isPixelBlocked = false;
-const testPixel = new Image();
-testPixel.onerror = function () { isPixelBlocked = true; };
-testPixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?" + Math.random();
+        const isOperaBlocking = window.getComputedStyle(operaTrap).display === "none" || operaTrap.offsetHeight === 0;
+        operaTrap.remove();
 
-if (isOperaBlocking || isPixelBlocked) {
-    lockPage();
-    return;
-}
+        // 🕵️ 2. Real Image/Pixel Load Verification (Soul & Opera दोनों का नेटवर्क ब्लॉकर)
+        let isPixelBlocked = false;
+        const testPixel = new Image();
+        testPixel.onerror = function () { 
+            if (navigator.onLine) isPixelBlocked = true; 
+        };
+        testPixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?" + Math.random();
+
+        if (isOperaBlocking || isPixelBlocked) {
+            lockPage();
+            return;
+        }
+
         // 📱 MOBILE VIEW FIX (Add-on right after previous pixel check)
         const mobileTrap = document.createElement("ins");
         mobileTrap.className = "adsbygoogle ad-unit";
@@ -167,19 +174,21 @@ if (isOperaBlocking || isPixelBlocked) {
             lockPage();
             return;
         }
+
         // 🛡️ 1. Dynamic AdSense Frame Render Check (iframe Render Detection)
-        const activeAdIns = document.querySelector("ins.adsbygoogle");
+        const activeAdIns = document.querySelector("ins.adsbygoogle[data-ad-status]");
         if (activeAdIns) {
             const hasIframe = activeAdIns.querySelector("iframe");
             const isUnfilled = activeAdIns.getAttribute("data-ad-status") === "unfilled";
-            if (!hasIframe || isUnfilled) {
+            const style = window.getComputedStyle(activeAdIns);
+            if ((!hasIframe && style.display === "none") || (isUnfilled && style.height === "0px")) {
                 lockPage();
                 return;
             }
         }
 
         // 🛡️ 2. Shadow DOM & Script Element Interception (Brave / Soul Deep Blocker)
-        if (window.google_ad_client === undefined && document.querySelector(".adsbygoogle")) {
+        if (window.google_ad_client === undefined && document.querySelector(".adsbygoogle") && document.readyState === "complete") {
             lockPage();
             return;
         }
@@ -188,86 +197,79 @@ if (isOperaBlocking || isPixelBlocked) {
         const startCheck = performance.now();
         for (let i = 0; i < 1000; i++) { Math.sqrt(i); }
         const endCheck = performance.now();
-        if (endCheck - startCheck > 500) { // If browser aggressively throttled script
+        if (endCheck - startCheck > 1200) { // Tuned threshold for lower-end CPUs
             lockPage();
             return;
         }
+
         // 🎯 SOUL AD-CONTAINER ZERO-HEIGHT TRAP
         const adUnits = document.querySelectorAll('.adsbygoogle, [id^="div-gpt-ad"]');
         for (let i = 0; i < adUnits.length; i++) {
             const adStyle = window.getComputedStyle(adUnits[i]);
             const rect = adUnits[i].getBoundingClientRect();
             
-            // अगर एड-यूनिट मौजूद है लेकिन Soul ने उसकी हाइट 0 कर दी है या iframe को गायब कर दिया है
-            if (adStyle.display === "none" || adStyle.visibility === "hidden" || rect.height === 0) {
+            if (adStyle.display === "none" || adStyle.visibility === "hidden" || (rect.height === 0 && adUnits[i].childNodes.length > 0)) {
                 lockPage();
                 return;
             }
         }
+
         // ⚡ GOD-MODE ENGINE: LEATHAL UNBREAKABLE ANTI-ADBLOCK KERNEL
         (function godModeKernel() {
-            // 1. Prototype Poisoning Guard + Deep Freeze (Soul Fake Stub Destroyer)
             try {
                 let realPush = window.adsbygoogle ? window.adsbygoogle.push : null;
                 Object.defineProperty(window, 'adsbygoogle', {
-                    configurable: false,
+                    configurable: true,
                     enumerable: true,
                     get: function() { return realPush; },
                     set: function(val) {
                         if (Array.isArray(val) && val.length === 0) {
                             setTimeout(() => {
                                 if (!window.adsbygoogle || !window.adsbygoogle.loaded) lockPage();
-                            }, 600);
+                            }, 1500);
                         } else {
                             realPush = val;
                         }
                     }
                 });
             } catch(e){}
-        // 🧬 SOUL BROWSER SPECIFIC FINGERPRINT & MULTI-SIGNAL DETECTOR
-        (function detectSoulEngine() {
-            let soulConfidenceScore = 0;
 
-            // Signal 1: Soul-Specific UserAgent / Engine Traces
-            const ua = navigator.userAgent.toLowerCase();
-            const isSoulUA = ua.includes('soul') || (window.chrome && navigator.vendor.includes('Google') && !window.chrome.loadTimes && ua.includes('mobile'));
-            if (isSoulUA) soulConfidenceScore += 30;
+            // 🧬 SOUL BROWSER SPECIFIC FINGERPRINT & MULTI-SIGNAL DETECTOR
+            (function detectSoulEngine() {
+                let soulConfidenceScore = 0;
 
-            // Signal 2: Chromium Custom Touch/Gesture Bridge (Soul Native Features)
-            if (window.soul || window.__soul_ext__ || (window.external && 'Soul' in window.external)) {
-                soulConfidenceScore += 50;
-            }
+                const ua = navigator.userAgent.toLowerCase();
+                const isSoulUA = ua.includes('soul') || (window.chrome && navigator.vendor.includes('Google') && !window.chrome.loadTimes && ua.includes('mobile'));
+                if (isSoulUA) soulConfidenceScore += 30;
 
-            // Signal 3: AdGuard/uBlock Stubbing Artifacts (Cosmetic Hiding Behavior)
-            const testTrap = document.createElement('div');
-            testTrap.className = 'adsbygoogle ad-slot-trap google-ad-sense';
-            testTrap.style.cssText = 'position:fixed;top:-999px;left:-999px;width:1px;height:1px;';
-            (document.body || document.documentElement).appendChild(testTrap);
-
-            // Signal 4: CSS Filter Injection Check (Confirmation Window)
-            setTimeout(() => {
-                const style = window.getComputedStyle(testTrap);
-                const isCosmeticBlocked = style.display === 'none' || style.visibility === 'hidden' || testTrap.offsetHeight === 0;
-                
-                if (isCosmeticBlocked) soulConfidenceScore += 40;
-                testTrap.remove();
-
-                // 🎯 FINAL VERIFICATION: Multi-Signal Confirmation Threshold (Score >= 70)
-                // यह सुनिश्चित करता है कि धीमे नेटवर्क वाले साधारण यूजर्स कभी लॉक न हों!
-                if (soulConfidenceScore >= 70) {
-                    lockPage();
+                if (window.soul || window.__soul_ext__ || (window.external && 'Soul' in window.external)) {
+                    soulConfidenceScore += 50;
                 }
-            }, 600); // 600ms Confirmation & Grace Period
-        })();
 
-            // 2. Real-time DOM Style Injection Guard (Forces Ads to Render)
+                const testTrap = document.createElement('div');
+                testTrap.className = 'adsbygoogle ad-slot-trap google-ad-sense';
+                testTrap.style.cssText = 'position:fixed;top:-999px;left:-999px;width:1px;height:1px;';
+                (document.body || document.documentElement).appendChild(testTrap);
+
+                setTimeout(() => {
+                    const style = window.getComputedStyle(testTrap);
+                    const isCosmeticBlocked = style.display === 'none' || style.visibility === 'hidden' || testTrap.offsetHeight === 0;
+                    
+                    if (isCosmeticBlocked) soulConfidenceScore += 40;
+                    testTrap.remove();
+
+                    if (soulConfidenceScore >= 70) {
+                        lockPage();
+                    }
+                }, 800);
+            })();
+
             const styleCheck = document.createElement('style');
             styleCheck.textContent = `.adsbygoogle { display: block !important; visibility: visible !important; opacity: 1 !important; }`;
             (document.head || document.documentElement).appendChild(styleCheck);
 
-            // 3. XHR + Fetch Universal Network Interceptor (Opera & Soul Silent Network Trap)
             const handleNetworkFailure = (url) => {
-                if (typeof url === 'string' && (url.includes('pagead2') || url.includes('doubleclick') || url.includes('googlesyndication'))) {
+                if (navigator.onLine && typeof url === 'string' && (url.includes('pagead2') || url.includes('doubleclick') || url.includes('googlesyndication'))) {
                     lockPage();
                 }
             };
@@ -275,7 +277,6 @@ if (isOperaBlocking || isPixelBlocked) {
             const xhrOpen = XMLHttpRequest.prototype.open;
             XMLHttpRequest.prototype.open = function(method, url) {
                 this.addEventListener('error', () => handleNetworkFailure(url));
-                this.addEventListener('abort', () => handleNetworkFailure(url));
                 return xhrOpen.apply(this, arguments);
             };
 
@@ -290,7 +291,6 @@ if (isOperaBlocking || isPixelBlocked) {
                 };
             }
 
-            // 4. MutationObserver Real-Time Element Deletion Interceptor
             const domObserver = new MutationObserver((mutations) => {
                 for (let mutation of mutations) {
                     mutation.removedNodes.forEach(node => {
@@ -302,20 +302,17 @@ if (isOperaBlocking || isPixelBlocked) {
             });
             domObserver.observe(document.documentElement, { childList: true, subtree: true });
 
-            // 5. Unkillable Continuous Execution Matrix (Multi-Vector Visual Inspector)
             setInterval(() => {
                 const insElements = document.querySelectorAll('ins.adsbygoogle');
                 insElements.forEach(ins => {
                     const rect = ins.getBoundingClientRect();
                     const style = window.getComputedStyle(ins);
                     
-                    // Direct Zero-Dimension, Hidden State, or Unrendered iFrame Trap
-                    const hasLoadedIframe = ins.querySelector('iframe');
-                    if (rect.height === 0 || rect.width === 0 || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0' || !hasLoadedIframe) {
+                    if (ins.attributes['data-ad-status'] && (rect.height === 0 || style.display === 'none' || style.visibility === 'hidden')) {
                         lockPage();
                     }
                 });
-            }, 300);
+            }, 1000); // Relaxed interval to 1s to remove false triggers
         })();
 
         // 1. Check Bait & Cosmetic Hiding (EasyList/ABP filters)
@@ -341,14 +338,16 @@ if (isOperaBlocking || isPixelBlocked) {
             return;
         }
 
-        // 3. Check Google Analytics & Global Objects (शुरुआत वाला ओरिजिनल लॉजिक)
-        const isGtagAvailable = typeof window.gtag === "function";
-        const isRealTagLoaded = typeof window.google_tag_data !== "undefined";
-        const isAdblockLoaded = typeof window.adsbygoogle === "undefined" || (window.adsbygoogle && window.adsbygoogle.loaded === false);
+        // 3. Check Google Analytics & Global Objects
+        if (document.readyState === "complete") {
+            const isGtagAvailable = typeof window.gtag === "function";
+            const isRealTagLoaded = typeof window.google_tag_data !== "undefined";
+            const isAdblockLoaded = typeof window.adsbygoogle === "undefined" || (window.adsbygoogle && window.adsbygoogle.loaded === false);
 
-        if (!isGtagAvailable || !isRealTagLoaded || isAdblockLoaded) {
-            lockPage();
-            return;
+            if (!isGtagAvailable && !isRealTagLoaded && isAdblockLoaded) {
+                lockPage();
+                return;
+            }
         }
 
         // 4. Network Ping Check (AdSense ping)
@@ -359,14 +358,17 @@ if (isOperaBlocking || isPixelBlocked) {
                 cache: "no-store"
             });
         } catch (err) {
-            lockPage();
+            if (navigator.onLine) lockPage();
         }
     }
 
     // 💓 Continuous Heartbeat & Scanner
     function initSystem() {
-        runAllChecks();
-        setInterval(runAllChecks, 1500); // हर 1.5 सेकंड में पूरी जर्नी के सारे चेक्स दोहराए जाएंगे
+        // Safe initial startup delay for AdSense script initialization
+        setTimeout(() => {
+            runAllChecks();
+            setInterval(runAllChecks, 2500); 
+        }, 2000);
     }
 
     if (document.readyState === "loading") {
