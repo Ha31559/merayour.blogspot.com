@@ -53,7 +53,7 @@
     // ==========================================================
     // ⏱️ TIMING / SAFETY
     // ==========================================================
-    const INITIAL_GRACE = 2700;
+    const INITIAL_GRACE = 2600;
     const INCIDENT_TTL = 12000;
     const INCIDENT_COOLDOWN = 7000;
 
@@ -1270,7 +1270,7 @@
              */
             setInterval(
                 runAllChecks,
-                1800
+                1500
             );
 
         }, 1700);
