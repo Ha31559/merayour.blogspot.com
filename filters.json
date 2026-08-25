@@ -1,0 +1,63 @@
+{
+  "version": 2,
+
+  "allowlist": [
+    "googlebot",
+    "google-inspectiontool",
+    "bingbot",
+    "adidxbot",
+    "slurp",
+    "duckduckbot",
+    "baiduspider",
+    "yandexbot",
+    "sogou",
+    "exabot",
+    "facebot",
+    "facebookexternalhit",
+    "ia_archiver"
+  ],
+
+  "knownBots": [
+    "semrushbot",
+    "ahrefsbot",
+    "mj12bot",
+    "dotbot",
+    "roguebot",
+    "bytespider",
+    "gptbot",
+    "claudebot",
+    "ccbot",
+    "petalbot",
+    "applebot-extended",
+    "amazonbot",
+    "perplexitybot"
+  ],
+
+  "knownScrapers": [
+    "httrack",
+    "wget",
+    "curl",
+    "python-requests",
+    "python-urllib",
+    "scrapy",
+    "go-http-client",
+    "java/",
+    "libwww-perl",
+    "httpclient",
+    "headlesschrome",
+    "puppeteer",
+    "playwright",
+    "selenium",
+    "phantomjs"
+  ],
+
+  "suspiciousPatterns": [
+    "headlesschrome",
+    "phantomjs",
+    "python-requests",
+    "python-urllib",
+    "go-http-client",
+    "libwww-perl",
+    "httpclient"
+  ]
+}
