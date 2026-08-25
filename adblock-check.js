@@ -1270,7 +1270,7 @@
              */
             setInterval(
                 runAllChecks,
-                2000
+                1800
             );
 
         }, 1700);
