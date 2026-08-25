@@ -8,7 +8,7 @@
 
     const BSD_CONFIG = {
         github: {
-            url: 'https://raw.githubusercontent.com/Ha31559/merayour.blogspot.com/main/filters.json',
+            url: 'https://raw.githubusercontent.com/Ha31559/merayour.blogspot.com/main/filters.json'
             timeout: 2000
         },
         cache: {
