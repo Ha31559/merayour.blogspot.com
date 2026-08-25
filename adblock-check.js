@@ -11,9 +11,9 @@
         title: "Hey Buddy!",
 
         message:
-            "merayour made possible by the support of our readers. " +
-            "To keep our stories free for everyone, please continue " +
-            "reading on a standard browser without active content blockers."
+            "Looks like a content blocker is active on your browser." +
+            "Merayour is made possible by the support of our readers, which helps us keep our stories free for everyone." +
+            "Please disable your content blocker or switch to a standard browser to continue reading."
     };
 
 
