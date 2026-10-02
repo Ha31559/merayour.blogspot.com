@@ -53,9 +53,9 @@
     // ==========================================================
     // ⏱️ TIMING / SAFETY
     // ==========================================================
-    const INITIAL_GRACE = 900;
-    const INCIDENT_TTL = 900;
-    const INCIDENT_COOLDOWN = 500;
+    const INITIAL_GRACE = 100;
+    const INCIDENT_TTL = 100;
+    const INCIDENT_COOLDOWN = 200;
 
     const nowReady = () =>
         performance.now() >= INITIAL_GRACE;
