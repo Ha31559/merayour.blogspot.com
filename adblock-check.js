@@ -55,7 +55,7 @@
     // ==========================================================
     const INITIAL_GRACE = 100;
     const INCIDENT_TTL = 100;
-    const INCIDENT_COOLDOWN = 200;
+    const INCIDENT_COOLDOWN = 100;
 
     const nowReady = () =>
         performance.now() >= INITIAL_GRACE;
@@ -125,12 +125,12 @@
 
             return legitAdRendered
                 ? 145
-                : 100;
+                : 70;
         }
 
         return legitAdRendered
             ? 155
-            : 110;
+            : 70;
     }
 
 
@@ -162,7 +162,7 @@
                 );
         }
 
-    }, 4000);
+    }, 1000);
 
 
     // ==========================================================
