@@ -21,8 +21,8 @@
     // 🧠 CONFIDENCE WEIGHTS
     // ==========================================================
     const WEIGHTS = {
-        CRITICAL: 80,
-        STRONG: 50,
+        CRITICAL: 70,
+        STRONG: 40,
         MEDIUM: 30,
         WEAK: 10
     };
@@ -53,9 +53,9 @@
     // ==========================================================
     // ⏱️ TIMING / SAFETY
     // ==========================================================
-    const INITIAL_GRACE = 100;
-    const INCIDENT_TTL = 100;
-    const INCIDENT_COOLDOWN = 100;
+    const INITIAL_GRACE = 70;
+    const INCIDENT_TTL = 70;
+    const INCIDENT_COOLDOWN = 70;
 
     const nowReady = () =>
         performance.now() >= INITIAL_GRACE;
@@ -125,12 +125,12 @@
 
             return legitAdRendered
                 ? 145
-                : 70;
+                : 60;
         }
 
         return legitAdRendered
             ? 155
-            : 70;
+            : 60;
     }
 
 
@@ -1266,14 +1266,14 @@
 
 
             /*
-             * Balanced 2.5 second cycle.
+             * Balanced 1.5 second cycle.
              */
             setInterval(
                 runAllChecks,
-                10
+                5
             );
 
-        }, 10);
+        }, 5);
     }
 
 
