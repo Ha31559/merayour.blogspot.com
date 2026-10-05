@@ -1,1299 +1,1222 @@
 (function () {
-    "use strict";
+"use strict";
 
-    // ==========================================================
-    // ⚙️ CONFIGURATION
-    // ==========================================================
-    const CONFIG = {
-        logoUrl:
-            "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUY8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666",
+// ==========================================================
+// ⚙️ CONFIGURATION
+// ==========================================================
+const CONFIG = {
+    logoUrl:
+        "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUY8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666",
 
-        title: "Hey Buddy!",
+    title: "Hey Buddy!",
 
-        message:
-            "Looks like a content blocker is active on your browser." +
-            "Merayour is made possible by the support of our readers, which helps us keep our stories free for everyone." +
-            "Please disable your content blocker or switch to a standard browser to continue reading."
-    };
-
-
-    // ==========================================================
-    // 🧠 CONFIDENCE WEIGHTS
-    // ==========================================================
-    const WEIGHTS = {
-        CRITICAL: 70,
-        STRONG: 40,
-        MEDIUM: 30,
-        WEAK: 10
-    };
+    message:
+        "It looks like an ad or content blocker is preventing this page from loading properly. " +
+        "Merayour is a free website supported by readers and advertising, which helps us keep our stories available without a subscription. " +
+        "If you enjoy our stories, please consider allowing ads on Merayour. " +
+        "Once your blocker is disabled for this site, you can continue reading normally."
+};
 
 
-    // ==========================================================
-    // 🎯 ENGINE STATE
-    // ==========================================================
-    let detectionScore = 0;
-    let legitAdRendered = false;
-    let pageLocked = false;
-
-    const incidentMap = new Map();
-
-    const evidenceMap = {
-        NETWORK: new Set(),
-        DOM_COSMETIC: new Set(),
-        BROWSER_ENGINE: new Set()
-    };
-
-    const categoryState = {
-        NETWORK: false,
-        DOM_COSMETIC: false,
-        BROWSER_ENGINE: false
-    };
+// ==========================================================
+// 🧠 CONFIDENCE WEIGHTS
+// ==========================================================
+const WEIGHTS = {
+    CRITICAL: 70,
+    STRONG: 40,
+    MEDIUM: 30,
+    WEAK: 10
+};
 
 
-    // ==========================================================
-    // ⏱️ TIMING / SAFETY
-    // ==========================================================
-    const INITIAL_GRACE = 70;
-    const INCIDENT_TTL = 70;
-    const INCIDENT_COOLDOWN = 70;
+// ==========================================================
+// 🎯 ENGINE STATE
+// ==========================================================
+let detectionScore = 0;
+let legitAdRendered = false;
+let pageLocked = false;
 
-    const nowReady = () =>
-        performance.now() >= INITIAL_GRACE;
+const incidentMap = new Map();
 
+const evidenceMap = {
+    NETWORK: new Set(),
+    DOM_COSMETIC: new Set(),
+    BROWSER_ENGINE: new Set()
+};
 
-    // ==========================================================
-    // 🌐 BROWSER CLASSIFICATION
-    // ==========================================================
-    const ua =
-        (navigator.userAgent || "").toLowerCase();
-
-    const vendor =
-        (navigator.vendor || "").toLowerCase();
-
-    const browser = {
-
-        soul:
-            ua.includes("soul") ||
-            !!window.soul ||
-            !!window.__soul_ext__,
-
-        brave:
-            !!(
-                navigator.brave &&
-                typeof navigator.brave.isBrave === "function"
-            ),
-
-        opera:
-            ua.includes("opera") ||
-            ua.includes("opr/"),
-
-        chrome:
-            !!window.chrome &&
-            vendor.includes("google"),
-
-        edge:
-            ua.includes("edg/"),
-
-        firefox:
-            ua.includes("firefox"),
-
-        safari:
-            /safari/.test(ua) &&
-            !/chrome|crios|android/.test(ua)
-    };
+const categoryState = {
+    NETWORK: false,
+    DOM_COSMETIC: false,
+    BROWSER_ENGINE: false
+};
 
 
-    const knownStandardBrowser =
-        browser.chrome ||
-        browser.edge ||
-        browser.firefox ||
-        browser.safari;
+// ==========================================================
+// ⏱️ TIMING / SAFETY
+// ==========================================================
+const INITIAL_GRACE = 70;
+const INCIDENT_TTL = 70;
+const INCIDENT_COOLDOWN = 70;
+
+const nowReady = () =>
+    performance.now() >= INITIAL_GRACE;
 
 
-    // ==========================================================
-    // 🎚️ BALANCED THRESHOLD
-    // ==========================================================
-    function getThreshold() {
+// ==========================================================
+// 🌐 BROWSER CLASSIFICATION
+// ==========================================================
+const ua =
+    (navigator.userAgent || "").toLowerCase();
 
-        /*
-         * Standard browsers receive a safety buffer.
-         *
-         * No browser fingerprint can lock by itself.
-         */
+const vendor =
+    (navigator.vendor || "").toLowerCase();
 
-        if (knownStandardBrowser) {
+const browser = {
 
-            return legitAdRendered
-                ? 145
-                : 60;
-        }
+    soul:
+        ua.includes("soul") ||
+        !!window.soul ||
+        !!window.__soul_ext__,
+
+    brave:
+        !!(
+            navigator.brave &&
+            typeof navigator.brave.isBrave === "function"
+        ),
+
+    opera:
+        ua.includes("opera") ||
+        ua.includes("opr/"),
+
+    chrome:
+        !!window.chrome &&
+        vendor.includes("google"),
+
+    edge:
+        ua.includes("edg/"),
+
+    firefox:
+        ua.includes("firefox"),
+
+    safari:
+        /safari/.test(ua) &&
+        !/chrome|crios|android/.test(ua)
+};
+
+
+const knownStandardBrowser =
+    browser.chrome ||
+    browser.edge ||
+    browser.firefox ||
+    browser.safari;
+
+
+// ==========================================================
+// 🎚️ BALANCED THRESHOLD
+// ==========================================================
+function getThreshold() {
+
+    /*
+     * Standard browsers receive a safety buffer.
+     *
+     * No browser fingerprint can lock by itself.
+     */
+
+    if (knownStandardBrowser) {
 
         return legitAdRendered
-            ? 155
+            ? 145
             : 60;
     }
 
+    return legitAdRendered
+        ? 155
+        : 60;
+}
 
-    // ==========================================================
-    // 🧹 STATE DECAY
-    // ==========================================================
-    setInterval(() => {
 
-        const now = performance.now();
+// ==========================================================
+// 🧹 STATE DECAY
+// ==========================================================
+setInterval(() => {
 
-        incidentMap.forEach((timestamp, id) => {
+    const now = performance.now();
 
-            if (now - timestamp > INCIDENT_TTL) {
-                incidentMap.delete(id);
-            }
+    incidentMap.forEach((timestamp, id) => {
 
-        });
+        if (now - timestamp > INCIDENT_TTL) {
+            incidentMap.delete(id);
+        }
+
+    });
+
+    /*
+     * Slow score decay prevents a temporary
+     * network failure from becoming permanent.
+     */
+    if (detectionScore > 0) {
+
+        detectionScore =
+            Math.max(
+                0,
+                detectionScore - 10
+            );
+    }
+
+}, 1000);
+
+
+// ==========================================================
+// ⭐ POSITIVE LEGITIMATE AD EVIDENCE
+// ==========================================================
+function checkRealAdRender() {
+
+    const ads =
+        document.querySelectorAll(".adsbygoogle");
+
+    let rendered = false;
+
+    ads.forEach(ad => {
+
+        const iframe =
+            ad.querySelector("iframe");
+
+        if (!iframe) return;
+
+        const rect =
+            iframe.getBoundingClientRect();
+
+        if (
+            rect.width > 0 &&
+            rect.height > 0
+        ) {
+            rendered = true;
+        }
+
+    });
+
+
+    if (rendered) {
+
+        legitAdRendered = true;
 
         /*
-         * Slow score decay prevents a temporary
-         * network failure from becoming permanent.
+         * Positive evidence clears
+         * accumulated suspicion.
          */
-        if (detectionScore > 0) {
+        detectionScore = 0;
 
-            detectionScore =
-                Math.max(
-                    0,
-                    detectionScore - 10
-                );
-        }
+        incidentMap.clear();
 
-    }, 1000);
+        Object.keys(categoryState)
+            .forEach(key => {
+                categoryState[key] = false;
+            });
 
-
-    // ==========================================================
-    // ⭐ POSITIVE LEGITIMATE AD EVIDENCE
-    // ==========================================================
-    function checkRealAdRender() {
-
-        const ads =
-            document.querySelectorAll(".adsbygoogle");
-
-        let rendered = false;
-
-        ads.forEach(ad => {
-
-            const iframe =
-                ad.querySelector("iframe");
-
-            if (!iframe) return;
-
-            const rect =
-                iframe.getBoundingClientRect();
-
-            if (
-                rect.width > 0 &&
-                rect.height > 0
-            ) {
-                rendered = true;
-            }
-
-        });
-
-
-        if (rendered) {
-
-            legitAdRendered = true;
-
-            /*
-             * Positive evidence clears
-             * accumulated suspicion.
-             */
-            detectionScore = 0;
-
-            incidentMap.clear();
-
-            Object.keys(categoryState)
-                .forEach(key => {
-                    categoryState[key] = false;
-                });
-
-            Object.keys(evidenceMap)
-                .forEach(key => {
-                    evidenceMap[key].clear();
-                });
-        }
-
-
-        return rendered;
+        Object.keys(evidenceMap)
+            .forEach(key => {
+                evidenceMap[key].clear();
+            });
     }
 
 
-    // ==========================================================
-    // 🔒 LOCK PAGE
-    // ==========================================================
-    function lockPage() {
+    return rendered;
+}
 
-        if (pageLocked) return;
 
-        if (legitAdRendered) return;
+// ==========================================================
+// 🔒 LOCK PAGE
+// ==========================================================
+function lockPage() {
 
-        pageLocked = true;
+    if (pageLocked) return;
 
+    if (legitAdRendered) return;
 
-        // ------------------------------------------------------
-        // 🛑 ANTI-TEXT / READER MODE CONTENT SANITIZATION
-        // ------------------------------------------------------
-        const mainContent =
-            document.querySelector(
-                "article, .post-body, .entry-content, main, #main-content"
-            );
+    pageLocked = true;
 
-        if (mainContent) {
 
-            mainContent.innerHTML = `
-                <div style="
-                    padding:30px;
-                    text-align:center;
-                    color:#fff;
-                ">
-                    <h3>Content Restricted</h3>
-                    <p>
-                        Please disable AdBlocker and refresh
-                        the page to view this content.
-                    </p>
-                </div>
-            `;
-        }
+    // ------------------------------------------------------
+    // 🛑 ANTI-TEXT / READER MODE CONTENT SANITIZATION
+    // ------------------------------------------------------
+    const mainContent =
+        document.querySelector(
+            "article, .post-body, .entry-content, main, #main-content"
+        );
 
+    if (mainContent) {
 
-        if (
-            document.getElementById(
-                "ag-lock-overlay"
-            )
-        ) {
-            return;
-        }
-
-
-        // ------------------------------------------------------
-        // 🎨 LOCK SCREEN STYLE
-        // ------------------------------------------------------
-        const style =
-            document.createElement("style");
-
-        style.textContent = `
-
-            html,
-            body {
-
-                overflow: hidden !important;
-                height: 100% !important;
-
-                -webkit-user-select: none !important;
-                -moz-user-select: none !important;
-                -ms-user-select: none !important;
-                user-select: none !important;
-            }
-
-
-            #ag-lock-overlay {
-
-                position: fixed;
-                inset: 0;
-
-                width: 100vw;
-                height: 100vh;
-
-                background: #0d1117;
-                color: #fff;
-
-                z-index: 2147483647;
-
-                display: flex;
-                align-items: center;
-                justify-content: center;
-
-                padding: 20px;
-                box-sizing: border-box;
-
-                font-family:
-                    system-ui,
-                    -apple-system,
-                    BlinkMacSystemFont,
-                    "Segoe UI",
-                    Roboto,
-                    sans-serif;
-
-                text-align: center;
-            }
-
-
-            .ag-card {
-
-                width: 100%;
-                max-width: 400px;
-
-                padding: 32px 24px;
-
-                background: #161b22;
-
-                border:
-                    1px solid #30363d;
-
-                border-radius: 12px;
-
-                box-shadow:
-                    0 10px 25px
-                    rgba(0,0,0,.5);
-
-                box-sizing: border-box;
-            }
-
-
-            .ag-logo {
-
-                max-width: 80px;
-                max-height: 80px;
-
-                margin-bottom: 16px;
-
-                border-radius: 8px;
-
-                object-fit: contain;
-            }
-
-
-            #ag-lock-overlay h1 {
-
-                margin: 0 0 12px;
-
-                font-size: 22px;
-
-                color: #f0f6fc;
-
-                font-weight: 600;
-            }
-
-
-            #ag-lock-overlay p {
-
-                margin: 0 0 22px;
-
-                font-size: 14px;
-
-                color: #8b949e;
-
-                line-height: 1.6;
-            }
-
-
-            .ag-refresh-btn {
-
-                appearance: none;
-
-                border: 1px solid #fff;
-
-                background: #fff;
-
-                color: #000;
-
-                padding: 11px 24px;
-
-                min-width: 120px;
-
-                border-radius: 7px;
-
-                font:
-                    600 14px system-ui;
-
-                cursor: pointer;
-
-                transition: .15s ease;
-            }
-
-
-            .ag-refresh-btn:hover {
-
-                background: #000;
-                color: #fff;
-            }
-
-
-            .ag-refresh-btn:active {
-
-                transform: scale(.97);
-            }
-
-
-            .ag-refresh-btn:focus-visible {
-
-                outline:
-                    2px solid #fff;
-
-                outline-offset: 3px;
-            }
-        `;
-
-        document.head.appendChild(style);
-
-
-        // ------------------------------------------------------
-        // 🛑 READER META SIGNAL
-        // ------------------------------------------------------
-        if (
-            !document.querySelector(
-                'meta[name="reader"]'
-            )
-        ) {
-
-            const metaReader =
-                document.createElement("meta");
-
-            metaReader.name = "reader";
-            metaReader.content = "no-reader-mode";
-
-            document.head.appendChild(metaReader);
-        }
-
-
-        // ------------------------------------------------------
-        // 🚫 OVERLAY
-        // ------------------------------------------------------
-        const overlay =
-            document.createElement("div");
-
-        overlay.id =
-            "ag-lock-overlay";
-
-
-        const logo =
-            CONFIG.logoUrl
-                ? `
-                    <img
-                        src="${CONFIG.logoUrl}"
-                        alt="Logo"
-                        class="ag-logo"
-                        onerror="this.style.display='none'"
-                    >
-                  `
-                : "";
-
-
-        overlay.innerHTML = `
-
-            <div class="ag-card">
-
-                ${logo}
-
-                <h1>
-                    ${CONFIG.title}
-                </h1>
-
+        mainContent.innerHTML = `
+            <div style="
+                padding:30px;
+                text-align:center;
+                color:#fff;
+            ">
+                <h3>Content Temporarily Unavailable</h3>
                 <p>
-                    ${CONFIG.message}
+                    This page is supported by advertising.
+                    Please allow ads for Merayour to continue reading.
                 </p>
-
-                <button
-                    type="button"
-                    class="ag-refresh-btn"
-                    id="ag-refresh-btn">
-
-                    Refresh
-
-                </button>
-
             </div>
         `;
-
-
-        (
-            document.body ||
-            document.documentElement
-        ).appendChild(overlay);
-
-
-        const button =
-            document.getElementById(
-                "ag-refresh-btn"
-            );
-
-
-        if (button) {
-
-            button.addEventListener(
-                "click",
-                () => {
-
-                    button.disabled = true;
-
-                    button.textContent =
-                        "Refreshing...";
-
-                    window.location.reload();
-                }
-            );
-        }
     }
 
 
-    // ==========================================================
-    // 🧠 FINAL DECISION ENGINE
-    // ==========================================================
-    function evaluate() {
-
-        if (pageLocked) return;
-
-        if (!navigator.onLine) return;
-
-        if (
-            document.readyState === "loading"
-        ) {
-            return;
-        }
-
-
-        // ⭐ Positive evidence always wins.
-        if (checkRealAdRender()) {
-            return;
-        }
-
-
-        if (!nowReady()) return;
-
-
-        const categoryCount =
-            Object.values(categoryState)
-                .filter(Boolean)
-                .length;
-
-
-        const networkEvidence =
-            evidenceMap.NETWORK.size;
-
-        const cosmeticEvidence =
-            evidenceMap.DOM_COSMETIC.size;
-
-        const browserEvidence =
-            evidenceMap.BROWSER_ENGINE.size;
-
-
-        /*
-         * ======================================================
-         * BALANCED CORRELATION
-         * ======================================================
-         *
-         * Network alone:
-         *     NEVER enough.
-         *
-         * Browser alone:
-         *     NEVER enough.
-         *
-         * DOM cosmetic alone:
-         *     NEVER enough.
-         *
-         * Network + DOM:
-         *     primary high-confidence route.
-         *
-         * Browser + Network + DOM:
-         *     strongest route.
-         */
-
-        const networkAndDOM =
-            networkEvidence > 0 &&
-            cosmeticEvidence > 0;
-
-
-        const fullCorrelation =
-            browserEvidence > 0 &&
-            networkEvidence > 0 &&
-            cosmeticEvidence > 0;
-
-
-        /*
-         * Require high score + independent evidence.
-         */
-        if (
-            detectionScore >= getThreshold() &&
-            categoryCount >= 2 &&
-            (
-                networkAndDOM ||
-                fullCorrelation
-            )
-        ) {
-
-            lockPage();
-        }
+    if (
+        document.getElementById(
+            "ag-lock-overlay"
+        )
+    ) {
+        return;
     }
 
 
-    // ==========================================================
-    // 🎯 INCIDENT REGISTRATION
-    // ==========================================================
-    function registerIncident(
-        id,
-        confidence,
-        category,
-        source
+    // ------------------------------------------------------
+    // 🎨 LOCK SCREEN STYLE
+    // ------------------------------------------------------
+    const style =
+        document.createElement("style");
+
+    style.textContent = `
+
+        html,
+        body {
+
+            overflow: hidden !important;
+            height: 100% !important;
+
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+            user-select: none !important;
+        }
+
+
+        #ag-lock-overlay {
+
+            position: fixed;
+            inset: 0;
+
+            width: 100vw;
+            height: 100vh;
+
+            background: #0d1117;
+            color: #fff;
+
+            z-index: 2147483647;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            padding: 20px;
+            box-sizing: border-box;
+
+            font-family:
+                system-ui,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Roboto,
+                sans-serif;
+
+            text-align: center;
+        }
+
+
+        .ag-card {
+
+            width: 100%;
+            max-width: 400px;
+
+            padding: 32px 24px;
+
+            background: #161b22;
+
+            border:
+                1px solid #30363d;
+
+            border-radius: 12px;
+
+            box-shadow:
+                0 10px 25px
+                rgba(0,0,0,.5);
+
+            box-sizing: border-box;
+        }
+
+
+        .ag-logo {
+
+            max-width: 80px;
+            max-height: 80px;
+
+            margin-bottom: 16px;
+
+            border-radius: 8px;
+
+            object-fit: contain;
+        }
+
+
+        #ag-lock-overlay h1 {
+
+            margin: 0 0 12px;
+
+            font-size: 22px;
+
+            color: #f0f6fc;
+
+            font-weight: 600;
+        }
+
+
+        #ag-lock-overlay p {
+
+            margin: 0;
+
+            font-size: 14px;
+
+            color: #8b949e;
+
+            line-height: 1.6;
+        }
+    `;
+
+    document.head.appendChild(style);
+
+
+    // ------------------------------------------------------
+    // 🛑 READER META SIGNAL
+    // ------------------------------------------------------
+    if (
+        !document.querySelector(
+            'meta[name="reader"]'
+        )
     ) {
 
-        if (!category) return;
+        const metaReader =
+            document.createElement("meta");
 
+        metaReader.name = "reader";
+        metaReader.content = "no-reader-mode";
 
-        const now =
-            performance.now();
-
-
-        /*
-         * Deduplication.
-         */
-        if (
-            incidentMap.has(id) &&
-            now -
-                incidentMap.get(id)
-                < INCIDENT_COOLDOWN
-        ) {
-            return;
-        }
-
-
-        incidentMap.set(
-            id,
-            now
-        );
-
-
-        const weight =
-            WEIGHTS[confidence] ||
-            WEIGHTS.WEAK;
-
-
-        detectionScore += weight;
-
-
-        categoryState[category] =
-            true;
-
-
-        evidenceMap[category].add(
-            source || id
-        );
-
-
-        /*
-         * Network + DOM correlation.
-         */
-        if (
-            evidenceMap.NETWORK.size > 0 &&
-            evidenceMap.DOM_COSMETIC.size > 0
-        ) {
-
-            detectionScore += 25;
-        }
-
-
-        /*
-         * Browser + Network + DOM.
-         */
-        if (
-            evidenceMap.BROWSER_ENGINE.size > 0 &&
-            evidenceMap.NETWORK.size > 0 &&
-            evidenceMap.DOM_COSMETIC.size > 0
-        ) {
-
-            detectionScore += 20;
-        }
-
-
-        /*
-         * Never lock synchronously from
-         * a single incident.
-         */
-        setTimeout(
-            evaluate,
-            300
-        );
+        document.head.appendChild(metaReader);
     }
 
 
-    // ==========================================================
-    // 🌐 NETWORK INCIDENT
-    // ==========================================================
-    function networkIncident(source) {
+    // ------------------------------------------------------
+    // 🚫 OVERLAY
+    // ------------------------------------------------------
+    const overlay =
+        document.createElement("div");
+
+    overlay.id =
+        "ag-lock-overlay";
+
+
+    const logo =
+        CONFIG.logoUrl
+            ? `
+                <img
+                    src="${CONFIG.logoUrl}"
+                    alt="Merayour"
+                    class="ag-logo"
+                    onerror="this.style.display='none'"
+                >
+              `
+            : "";
+
+
+    overlay.innerHTML = `
+
+        <div class="ag-card">
+
+            ${logo}
+
+            <h1>
+                ${CONFIG.title}
+            </h1>
+
+            <p>
+                ${CONFIG.message}
+            </p>
+
+        </div>
+    `;
+
+
+    (
+        document.body ||
+        document.documentElement
+    ).appendChild(overlay);
+}
+
+
+// ==========================================================
+// 🧠 FINAL DECISION ENGINE
+// ==========================================================
+function evaluate() {
+
+    if (pageLocked) return;
+
+    if (!navigator.onLine) return;
+
+    if (
+        document.readyState === "loading"
+    ) {
+        return;
+    }
+
+
+    // ⭐ Positive evidence always wins.
+    if (checkRealAdRender()) {
+        return;
+    }
+
+
+    if (!nowReady()) return;
+
+
+    const categoryCount =
+        Object.values(categoryState)
+            .filter(Boolean)
+            .length;
+
+
+    const networkEvidence =
+        evidenceMap.NETWORK.size;
+
+    const cosmeticEvidence =
+        evidenceMap.DOM_COSMETIC.size;
+
+    const browserEvidence =
+        evidenceMap.BROWSER_ENGINE.size;
+
+
+    /*
+     * ======================================================
+     * BALANCED CORRELATION
+     * ======================================================
+     *
+     * Network alone:
+     *     NEVER enough.
+     *
+     * Browser alone:
+     *     NEVER enough.
+     *
+     * DOM cosmetic alone:
+     *     NEVER enough.
+     *
+     * Network + DOM:
+     *     primary high-confidence route.
+     *
+     * Browser + Network + DOM:
+     *     strongest route.
+     */
+
+
+    const networkAndDOM =
+        networkEvidence > 0 &&
+        cosmeticEvidence > 0;
+
+
+    const fullCorrelation =
+        browserEvidence > 0 &&
+        networkEvidence > 0 &&
+        cosmeticEvidence > 0;
+
+
+    /*
+     * Require high score + independent evidence.
+     */
+    if (
+        detectionScore >= getThreshold() &&
+        categoryCount >= 2 &&
+        (
+            networkAndDOM ||
+            fullCorrelation
+        )
+    ) {
+
+        lockPage();
+    }
+}
+
+
+// ==========================================================
+// 🎯 INCIDENT REGISTRATION
+// ==========================================================
+function registerIncident(
+    id,
+    confidence,
+    category,
+    source
+) {
+
+    if (!category) return;
+
+
+    const now =
+        performance.now();
+
+
+    /*
+     * Deduplication.
+     */
+    if (
+        incidentMap.has(id) &&
+        now -
+            incidentMap.get(id)
+            < INCIDENT_COOLDOWN
+    ) {
+        return;
+    }
+
+
+    incidentMap.set(
+        id,
+        now
+    );
+
+
+    const weight =
+        WEIGHTS[confidence] ||
+        WEIGHTS.WEAK;
+
+
+    detectionScore += weight;
+
+
+    categoryState[category] =
+        true;
+
+
+    evidenceMap[category].add(
+        source || id
+    );
+
+
+    /*
+     * Network + DOM correlation.
+     */
+    if (
+        evidenceMap.NETWORK.size > 0 &&
+        evidenceMap.DOM_COSMETIC.size > 0
+    ) {
+
+        detectionScore += 25;
+    }
+
+
+    /*
+     * Browser + Network + DOM.
+     */
+    if (
+        evidenceMap.BROWSER_ENGINE.size > 0 &&
+        evidenceMap.NETWORK.size > 0 &&
+        evidenceMap.DOM_COSMETIC.size > 0
+    ) {
+
+        detectionScore += 20;
+    }
+
+
+    /*
+     * Never lock synchronously from
+     * a single incident.
+     */
+    setTimeout(
+        evaluate,
+        300
+    );
+}
+
+
+// ==========================================================
+// 🌐 NETWORK INCIDENT
+// ==========================================================
+function networkIncident(source) {
+
+    if (!navigator.onLine) {
+        return;
+    }
+
+
+    /*
+     * Confirmation delay.
+     */
+    setTimeout(() => {
 
         if (!navigator.onLine) {
             return;
         }
 
 
-        /*
-         * Confirmation delay.
-         */
-        setTimeout(() => {
+        registerIncident(
+            "network:" + source,
+            "MEDIUM",
+            "NETWORK",
+            source
+        );
 
-            if (!navigator.onLine) {
-                return;
-            }
-
-
-            registerIncident(
-                "network:" + source,
-                "MEDIUM",
-                "NETWORK",
-                source
-            );
-
-        }, 700);
-    }
+    }, 700);
+}
 
 
-    // ==========================================================
-    // 🪤 AD BAIT
-    // ==========================================================
-    function createBait() {
+// ==========================================================
+// 🪤 AD BAIT
+// ==========================================================
+function createBait() {
 
-        let bait =
-            document.getElementById(
-                "ag-ad-bait"
-            );
-
-
-        if (bait) {
-            return bait;
-        }
+    let bait =
+        document.getElementById(
+            "ag-ad-bait"
+        );
 
 
-        bait =
-            document.createElement(
-                "div"
-            );
-
-
-        bait.id =
-            "ag-ad-bait";
-
-
-        bait.className =
-            "adsbygoogle ad-banner ad-unit google-ad";
-
-
-        bait.style.cssText =
-            "width:1px!important;" +
-            "height:1px!important;" +
-            "position:absolute!important;" +
-            "left:-9999px!important;" +
-            "top:-9999px!important;" +
-            "opacity:0.01!important;";
-
-
-        (
-            document.body ||
-            document.documentElement
-        ).appendChild(bait);
-
-
+    if (bait) {
         return bait;
     }
 
 
-    // ==========================================================
-    // 🎨 COSMETIC DETECTION
-    // ==========================================================
-    function checkCosmetic() {
-
-        const bait =
-            createBait();
+    bait =
+        document.createElement(
+            "div"
+        );
 
 
-        if (!bait) return;
+    bait.id =
+        "ag-ad-bait";
 
 
-        const style =
-            window.getComputedStyle(
-                bait
-            );
+    bait.className =
+        "adsbygoogle ad-banner ad-unit google-ad";
 
 
-        const hidden =
-            style.display === "none" ||
-            style.visibility === "hidden" ||
-            bait.offsetHeight === 0;
+    bait.style.cssText =
+        "width:1px!important;" +
+        "height:1px!important;" +
+        "position:absolute!important;" +
+        "left:-9999px!important;" +
+        "top:-9999px!important;" +
+        "opacity:0.01!important;";
 
 
-        if (hidden) {
-
-            const hits =
-                parseInt(
-                    bait.dataset.hits || "0",
-                    10
-                ) + 1;
+    (
+        document.body ||
+        document.documentElement
+    ).appendChild(bait);
 
 
-            bait.dataset.hits =
-                String(hits);
+    return bait;
+}
 
 
-            /*
-             * Persistent hiding required.
-             */
-            if (hits >= 2) {
+// ==========================================================
+// 🎨 COSMETIC DETECTION
+// ==========================================================
+function checkCosmetic() {
 
-                registerIncident(
-                    "cosmetic:persistent-bait",
-                    "STRONG",
-                    "DOM_COSMETIC",
-                    "persistent_bait"
-                );
-            }
-
-        } else {
-
-            bait.dataset.hits = "0";
-        }
-    }
+    const bait =
+        createBait();
 
 
-    // ==========================================================
-    // 🧬 BROWSER SIGNALS
-    // ==========================================================
-    function checkBrowserSignals() {
-
-        let score = 0;
+    if (!bait) return;
 
 
-        /*
-         * Soul UA = supporting signal.
-         */
-        if (browser.soul) {
-            score += 30;
-        }
+    const style =
+        window.getComputedStyle(
+            bait
+        );
+
+
+    const hidden =
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        bait.offsetHeight === 0;
+
+
+    if (hidden) {
+
+        const hits =
+            parseInt(
+                bait.dataset.hits || "0",
+                10
+            ) + 1;
+
+
+        bait.dataset.hits =
+            String(hits);
 
 
         /*
-         * Explicit Soul environment trace.
+         * Persistent hiding required.
          */
-        if (
-            window.soul ||
-            window.__soul_ext__ ||
-            (
-                window.external &&
-                "Soul" in window.external
-            )
-        ) {
-
-            score += 40;
-        }
-
-
-        /*
-         * Brave API is only supporting evidence.
-         */
-        if (browser.brave) {
-            score += 15;
-        }
-
-
-        /*
-         * Browser evidence NEVER locks alone.
-         */
-        if (score >= 60) {
+        if (hits >= 2) {
 
             registerIncident(
-                "browser:strong-trace",
+                "cosmetic:persistent-bait",
                 "STRONG",
-                "BROWSER_ENGINE",
-                "browser_strong"
-            );
-
-        } else if (score >= 30) {
-
-            registerIncident(
-                "browser:weak-trace",
-                "WEAK",
-                "BROWSER_ENGINE",
-                "browser_weak"
+                "DOM_COSMETIC",
+                "persistent_bait"
             );
         }
-    }
-
-
-    // ==========================================================
-    // 📦 AD STATE INSPECTION
-    // ==========================================================
-    function inspectAdState() {
-
-        const ad =
-            document.querySelector(
-                "ins.adsbygoogle"
-            );
-
-
-        if (!ad) return;
-
-
-        const iframe =
-            ad.querySelector(
-                "iframe"
-            );
-
-
-        if (iframe) {
-
-            const rect =
-                iframe.getBoundingClientRect();
-
-
-            if (
-                rect.width > 0 &&
-                rect.height > 0
-            ) {
-
-                legitAdRendered = true;
-
-                detectionScore = 0;
-
-                return;
-            }
-        }
-
-
-        /*
-         * Unfilled ad is neutral.
-         */
-        if (
-            ad.getAttribute(
-                "data-ad-status"
-            ) === "unfilled"
-        ) {
-
-            return;
-        }
-    }
-
-
-    // ==========================================================
-    // 🌐 NETWORK PIXEL
-    // ==========================================================
-    function runPixelTest() {
-
-        const pixel =
-            new Image();
-
-
-        pixel.onload =
-            () => {};
-
-
-        pixel.onerror =
-            () => {
-
-                networkIncident(
-                    "pixel"
-                );
-            };
-
-
-        pixel.src =
-            "https://pagead2.googlesyndication.com/pagead/img/0.gif?" +
-            Date.now();
-    }
-
-
-    // ==========================================================
-    // 🌐 NETWORK FETCH
-    // ==========================================================
-    async function runFetchTest() {
-
-        try {
-
-            await fetch(
-                "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
-                {
-                    method: "HEAD",
-                    mode: "no-cors",
-                    cache: "no-store"
-                }
-            );
-
-        } catch (error) {
-
-            networkIncident(
-                "fetch"
-            );
-        }
-    }
-
-
-    // ==========================================================
-    // 🚨 SCRIPT ERROR INTERCEPTOR
-    // ==========================================================
-    window.addEventListener(
-        "error",
-        function (event) {
-
-            if (
-                !event ||
-                !event.target
-            ) {
-                return;
-            }
-
-
-            const src =
-                event.target.src ||
-                "";
-
-
-            if (
-                /googlesyndication|pagead2/i
-                    .test(src)
-            ) {
-
-                networkIncident(
-                    "script"
-                );
-            }
-
-        },
-        true
-    );
-
-
-    // ==========================================================
-    // ⚡ XHR INTERCEPTOR
-    // ==========================================================
-    (function installXHR() {
-
-        const originalOpen =
-            XMLHttpRequest.prototype.open;
-
-
-        XMLHttpRequest.prototype.open =
-            function (
-                method,
-                url
-            ) {
-
-                this.addEventListener(
-                    "error",
-                    () => {
-
-                        if (
-                            typeof url !==
-                                "string"
-                        ) {
-                            return;
-                        }
-
-
-                        if (
-                            /pagead2|googlesyndication/i
-                                .test(url)
-                        ) {
-
-                            networkIncident(
-                                "xhr"
-                            );
-                        }
-
-                    }
-                );
-
-
-                return originalOpen.apply(
-                    this,
-                    arguments
-                );
-            };
-
-    })();
-
-
-    // ==========================================================
-    // ⚡ FETCH INTERCEPTOR
-    // ==========================================================
-    (function installFetchInterceptor() {
-
-        if (!window.fetch) {
-            return;
-        }
-
-
-        const originalFetch =
-            window.fetch;
-
-
-        window.fetch =
-            function (...args) {
-
-                const url =
-                    typeof args[0] ===
-                        "string"
-                        ? args[0]
-                        : args[0]?.url ||
-                          "";
-
-
-                return originalFetch
-                    .apply(
-                        this,
-                        args
-                    )
-                    .catch(error => {
-
-                        if (
-                            /pagead2|googlesyndication/i
-                                .test(url)
-                        ) {
-
-                            networkIncident(
-                                "fetch-interceptor"
-                            );
-                        }
-
-
-                        throw error;
-                    });
-
-            };
-
-    })();
-
-
-    // ==========================================================
-    // 👀 TARGETED DOM OBSERVER
-    // ==========================================================
-    (function installDOMObserver() {
-
-        const observer =
-            new MutationObserver(
-                mutations => {
-
-                    mutations.forEach(
-                        mutation => {
-
-                            mutation
-                                .removedNodes
-                                .forEach(
-                                    node => {
-
-                                        if (
-                                            node.nodeType !==
-                                                1
-                                        ) {
-                                            return;
-                                        }
-
-
-                                        const removedAd =
-                                            node.classList?.contains(
-                                                "adsbygoogle"
-                                            ) ||
-                                            node.tagName ===
-                                                "INS";
-
-
-                                        if (
-                                            removedAd
-                                        ) {
-
-                                            registerIncident(
-                                                "dom:removed-ad",
-                                                "STRONG",
-                                                "DOM_COSMETIC",
-                                                "ad_removal"
-                                            );
-                                        }
-
-                                    }
-                                );
-                        }
-                    );
-
-                }
-            );
-
-
-        observer.observe(
-            document.documentElement,
-            {
-                childList: true,
-                subtree: true
-            }
-        );
-
-    })();
-
-
-    // ==========================================================
-    // 🔄 MAIN CHECK CYCLE
-    // ==========================================================
-    async function runAllChecks() {
-
-        if (pageLocked) return;
-
-
-        /*
-         * Positive evidence first.
-         */
-        if (checkRealAdRender()) {
-            return;
-        }
-
-
-        inspectAdState();
-
-
-        if (legitAdRendered) {
-            return;
-        }
-
-
-        checkBrowserSignals();
-
-        checkCosmetic();
-
-        runPixelTest();
-
-        await runFetchTest();
-
-        evaluate();
-    }
-
-
-    // ==========================================================
-    // 💓 INITIALIZATION
-    // ==========================================================
-    function init() {
-
-        setTimeout(() => {
-
-            runAllChecks();
-
-
-            /*
-             * Balanced 1.5 second cycle.
-             */
-            setInterval(
-                runAllChecks,
-                5
-            );
-
-        }, 5);
-    }
-
-
-    // ==========================================================
-    // 🚀 START
-    // ==========================================================
-    if (
-        document.readyState ===
-        "loading"
-    ) {
-
-        document.addEventListener(
-            "DOMContentLoaded",
-            init,
-            { once: true }
-        );
 
     } else {
 
-        init();
+        bait.dataset.hits = "0";
     }
+}
+
+
+// ==========================================================
+// 🧬 BROWSER SIGNALS
+// ==========================================================
+function checkBrowserSignals() {
+
+    let score = 0;
+
+
+    /*
+     * Soul UA = supporting signal.
+     */
+    if (browser.soul) {
+        score += 30;
+    }
+
+
+    /*
+     * Explicit Soul environment trace.
+     */
+    if (
+        window.soul ||
+        window.__soul_ext__ ||
+        (
+            window.external &&
+            "Soul" in window.external
+        )
+    ) {
+
+        score += 40;
+    }
+
+
+    /*
+     * Brave API is only supporting evidence.
+     */
+    if (browser.brave) {
+        score += 15;
+    }
+
+
+    /*
+     * Browser evidence NEVER locks alone.
+     */
+    if (score >= 60) {
+
+        registerIncident(
+            "browser:strong-trace",
+            "STRONG",
+            "BROWSER_ENGINE",
+            "browser_strong"
+        );
+
+    } else if (score >= 30) {
+
+        registerIncident(
+            "browser:weak-trace",
+            "WEAK",
+            "BROWSER_ENGINE",
+            "browser_weak"
+        );
+    }
+}
+
+
+// ==========================================================
+// 📦 AD STATE INSPECTION
+// ==========================================================
+function inspectAdState() {
+
+    const ad =
+        document.querySelector(
+            "ins.adsbygoogle"
+        );
+
+
+    if (!ad) return;
+
+
+    const iframe =
+        ad.querySelector(
+            "iframe"
+        );
+
+
+    if (iframe) {
+
+        const rect =
+            iframe.getBoundingClientRect();
+
+
+        if (
+            rect.width > 0 &&
+            rect.height > 0
+        ) {
+
+            legitAdRendered = true;
+
+            detectionScore = 0;
+
+            return;
+        }
+    }
+
+
+    /*
+     * Unfilled ad is neutral.
+     */
+    if (
+        ad.getAttribute(
+            "data-ad-status"
+        ) === "unfilled"
+    ) {
+
+        return;
+    }
+}
+
+
+// ==========================================================
+// 🌐 NETWORK PIXEL
+// ==========================================================
+function runPixelTest() {
+
+    const pixel =
+        new Image();
+
+
+    pixel.onload =
+        () => {};
+
+
+    pixel.onerror =
+        () => {
+
+            networkIncident(
+                "pixel"
+            );
+        };
+
+
+    pixel.src =
+        "https://pagead2.googlesyndication.com/pagead/img/0.gif?" +
+        Date.now();
+}
+
+
+// ==========================================================
+// 🌐 NETWORK FETCH
+// ==========================================================
+async function runFetchTest() {
+
+    try {
+
+        await fetch(
+            "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+            {
+                method: "HEAD",
+                mode: "no-cors",
+                cache: "no-store"
+            }
+        );
+
+    } catch (error) {
+
+        networkIncident(
+            "fetch"
+        );
+    }
+}
+
+
+// ==========================================================
+// 🚨 SCRIPT ERROR INTERCEPTOR
+// ==========================================================
+window.addEventListener(
+    "error",
+    function (event) {
+
+        if (
+            !event ||
+            !event.target
+        ) {
+            return;
+        }
+
+
+        const src =
+            event.target.src ||
+            "";
+
+
+        if (
+            /googlesyndication|pagead2/i
+                .test(src)
+        ) {
+
+            networkIncident(
+                "script"
+            );
+        }
+
+    },
+    true
+);
+
+
+// ==========================================================
+// ⚡ XHR INTERCEPTOR
+// ==========================================================
+(function installXHR() {
+
+    const originalOpen =
+        XMLHttpRequest.prototype.open;
+
+
+    XMLHttpRequest.prototype.open =
+        function (
+            method,
+            url
+        ) {
+
+            this.addEventListener(
+                "error",
+                () => {
+
+                    if (
+                        typeof url !==
+                            "string"
+                    ) {
+                        return;
+                    }
+
+
+                    if (
+                        /pagead2|googlesyndication/i
+                            .test(url)
+                    ) {
+
+                        networkIncident(
+                            "xhr"
+                        );
+                    }
+
+                }
+            );
+
+
+            return originalOpen.apply(
+                this,
+                arguments
+            );
+        };
+
+})();
+
+
+// ==========================================================
+// ⚡ FETCH INTERCEPTOR
+// ==========================================================
+(function installFetchInterceptor() {
+
+    if (!window.fetch) {
+        return;
+    }
+
+
+    const originalFetch =
+        window.fetch;
+
+
+    window.fetch =
+        function (...args) {
+
+            const url =
+                typeof args[0] ===
+                    "string"
+                    ? args[0]
+                    : args[0]?.url ||
+                      "";
+
+
+            return originalFetch
+                .apply(
+                    this,
+                    args
+                )
+                .catch(error => {
+
+                    if (
+                        /pagead2|googlesyndication/i
+                            .test(url)
+                    ) {
+
+                        networkIncident(
+                            "fetch-interceptor"
+                        );
+                    }
+
+
+                    throw error;
+                });
+
+        };
+
+})();
+
+
+// ==========================================================
+// 👀 TARGETED DOM OBSERVER
+// ==========================================================
+(function installDOMObserver() {
+
+    const observer =
+        new MutationObserver(
+            mutations => {
+
+                mutations.forEach(
+                    mutation => {
+
+                        mutation
+                            .removedNodes
+                            .forEach(
+                                node => {
+
+                                    if (
+                                        node.nodeType !==
+                                            1
+                                    ) {
+                                        return;
+                                    }
+
+
+                                    const removedAd =
+                                        node.classList?.contains(
+                                            "adsbygoogle"
+                                        ) ||
+                                        node.tagName ===
+                                            "INS";
+
+
+                                    if (
+                                        removedAd
+                                    ) {
+
+                                        registerIncident(
+                                            "dom:removed-ad",
+                                            "STRONG",
+                                            "DOM_COSMETIC",
+                                            "ad_removal"
+                                        );
+                                    }
+
+                                }
+                            );
+                    }
+                );
+
+            }
+        );
+
+
+    observer.observe(
+        document.documentElement,
+        {
+            childList: true,
+            subtree: true
+        }
+    );
+
+})();
+
+
+// ==========================================================
+// 🔄 MAIN CHECK CYCLE
+// ==========================================================
+async function runAllChecks() {
+
+    if (pageLocked) return;
+
+
+    /*
+     * Positive evidence first.
+     */
+    if (checkRealAdRender()) {
+        return;
+    }
+
+
+    inspectAdState();
+
+
+    if (legitAdRendered) {
+        return;
+    }
+
+
+    checkBrowserSignals();
+
+    checkCosmetic();
+
+    runPixelTest();
+
+    await runFetchTest();
+
+    evaluate();
+}
+
+
+// ==========================================================
+// 💓 INITIALIZATION
+// ==========================================================
+function init() {
+
+    setTimeout(() => {
+
+        runAllChecks();
+
+
+        /*
+         * Balanced 1.5 second cycle.
+         */
+        setInterval(
+            runAllChecks,
+            5
+        );
+
+    }, 5);
+}
+
+
+// ==========================================================
+// 🚀 START
+// ==========================================================
+if (
+    document.readyState ===
+    "loading"
+) {
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        init,
+        { once: true }
+    );
+
+} else {
+
+    init();
+}
 
 })();
