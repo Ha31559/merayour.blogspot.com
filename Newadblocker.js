@@ -71,12 +71,12 @@ const INCIDENT_COOLDOWN = 70;
  *
  * Checks the actual ad/DOM state twice per second.
  */
-const LOCAL_WATCH_INTERVAL = 500;
+const LOCAL_WATCH_INTERVAL = 100;
 
 /*
  * Heavy network verification is intentionally slower.
  */
-const NETWORK_WATCH_INTERVAL = 3000;
+const NETWORK_WATCH_INTERVAL = 500;
 
 const nowReady = () =>
     performance.now() >= INITIAL_GRACE;
@@ -183,7 +183,7 @@ setInterval(() => {
             );
     }
 
-}, 1000);
+}, 500);
 
 
 // ==========================================================
@@ -1378,7 +1378,7 @@ function init() {
             NETWORK_WATCH_INTERVAL
         );
 
-    }, 5);
+    }, 50);
 }
 
 
