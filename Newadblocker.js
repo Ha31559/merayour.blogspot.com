@@ -59,19 +59,19 @@
     // ==========================================================
     const INITIAL_GRACE = 1000;
 
-    const INCIDENT_TTL = 5000;
+    const INCIDENT_TTL = 500;
 
-    const INCIDENT_COOLDOWN = 1000;
+    const INCIDENT_COOLDOWN = 100;
 
     const LOCAL_WATCH_INTERVAL = 500;
 
-    const NETWORK_WATCH_INTERVAL = 3000;
+    const NETWORK_WATCH_INTERVAL = 300;
 
     const delayedChecks = [
-        1500,
-        3000,
-        6000,
-        10000
+        500,
+        300,
+        600,
+        1000
     ];
 
     const nowReady = () =>
@@ -692,7 +692,7 @@
 
         setTimeout(
             evaluate,
-            150
+            100
         );
     }
 
@@ -982,7 +982,7 @@
         if (
             browser.brave
         ) {
-            score += 15;
+            score += 10;
         }
 
         if (
