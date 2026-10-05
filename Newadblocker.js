@@ -1193,10 +1193,10 @@ function init() {
          */
         setInterval(
             runAllChecks,
-            5
+            500
         );
 
-    }, 5);
+    }, 500);
 }
 
 
