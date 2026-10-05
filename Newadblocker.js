@@ -36,6 +36,14 @@ let detectionScore = 0;
 let legitAdRendered = false;
 let pageLocked = false;
 
+/*
+ * Remembers the previous real-ad state.
+ *
+ * true  = real ad was previously rendered
+ * false = real ad is currently not rendered
+ */
+let lastAdRenderState = false;
+
 const incidentMap = new Map();
 
 const evidenceMap = {
@@ -57,6 +65,18 @@ const categoryState = {
 const INITIAL_GRACE = 70;
 const INCIDENT_TTL = 70;
 const INCIDENT_COOLDOWN = 70;
+
+/*
+ * Fast local watchdog.
+ *
+ * Checks the actual ad/DOM state twice per second.
+ */
+const LOCAL_WATCH_INTERVAL = 500;
+
+/*
+ * Heavy network verification is intentionally slower.
+ */
+const NETWORK_WATCH_INTERVAL = 3000;
 
 const nowReady = () =>
     performance.now() >= INITIAL_GRACE;
@@ -167,6 +187,27 @@ setInterval(() => {
 
 
 // ==========================================================
+// 🧹 RESET DETECTION STATE
+// ==========================================================
+function resetDetectionState() {
+
+    detectionScore = 0;
+
+    incidentMap.clear();
+
+    Object.keys(categoryState)
+        .forEach(key => {
+            categoryState[key] = false;
+        });
+
+    Object.keys(evidenceMap)
+        .forEach(key => {
+            evidenceMap[key].clear();
+        });
+}
+
+
+// ==========================================================
 // ⭐ POSITIVE LEGITIMATE AD EVIDENCE
 // ==========================================================
 function checkRealAdRender() {
@@ -196,7 +237,22 @@ function checkRealAdRender() {
     });
 
 
-    if (rendered) {
+    // ======================================================
+    // 🔄 AD STATE CHANGE
+    // ======================================================
+
+    /*
+     * ------------------------------------------------------
+     * STATE 1:
+     * Ad has appeared.
+     * ------------------------------------------------------
+     */
+    if (
+        rendered &&
+        !lastAdRenderState
+    ) {
+
+        lastAdRenderState = true;
 
         legitAdRendered = true;
 
@@ -204,23 +260,90 @@ function checkRealAdRender() {
          * Positive evidence clears
          * accumulated suspicion.
          */
-        detectionScore = 0;
+        resetDetectionState();
 
-        incidentMap.clear();
+        /*
+         * If blocker notice is visible,
+         * remove it automatically.
+         */
+        if (pageLocked) {
+            unlockPage();
+        }
+    }
 
-        Object.keys(categoryState)
-            .forEach(key => {
-                categoryState[key] = false;
-            });
 
-        Object.keys(evidenceMap)
-            .forEach(key => {
-                evidenceMap[key].clear();
-            });
+    /*
+     * ------------------------------------------------------
+     * STATE 2:
+     * Previously rendered ad has disappeared.
+     *
+     * This does NOT immediately lock the page.
+     * It only starts a fresh detection cycle.
+     * ------------------------------------------------------
+     */
+    if (
+        !rendered &&
+        lastAdRenderState
+    ) {
+
+        lastAdRenderState = false;
+
+        legitAdRendered = false;
+
+        /*
+         * Start fresh evidence collection.
+         */
+        resetDetectionState();
+    }
+
+
+    /*
+     * Keep the current legitimate state.
+     */
+    if (rendered) {
+        legitAdRendered = true;
     }
 
 
     return rendered;
+}
+
+
+// ==========================================================
+// 🔓 UNLOCK PAGE
+// ==========================================================
+function unlockPage() {
+
+    if (!pageLocked) return;
+
+
+    /*
+     * Remove blocker overlay.
+     */
+    const overlay =
+        document.getElementById(
+            "ag-lock-overlay"
+        );
+
+    if (overlay) {
+        overlay.remove();
+    }
+
+
+    /*
+     * Remove only our lock style.
+     */
+    const style =
+        document.getElementById(
+            "ag-lock-style"
+        );
+
+    if (style) {
+        style.remove();
+    }
+
+
+    pageLocked = false;
 }
 
 
@@ -236,30 +359,15 @@ function lockPage() {
     pageLocked = true;
 
 
-    // ------------------------------------------------------
-    // 🛑 ANTI-TEXT / READER MODE CONTENT SANITIZATION
-    // ------------------------------------------------------
-    const mainContent =
-        document.querySelector(
-            "article, .post-body, .entry-content, main, #main-content"
-        );
-
-    if (mainContent) {
-
-        mainContent.innerHTML = `
-            <div style="
-                padding:30px;
-                text-align:center;
-                color:#fff;
-            ">
-                <h3>Content Temporarily Unavailable</h3>
-                <p>
-                    This page is supported by advertising.
-                    Please allow ads for Merayour to continue reading.
-                </p>
-            </div>
-        `;
-    }
+    /*
+     * IMPORTANT:
+     *
+     * The original article/content is NOT replaced.
+     *
+     * The overlay blocks access visually, while the
+     * underlying page remains intact so the real ad can
+     * continue rendering.
+     */
 
 
     if (
@@ -276,6 +384,9 @@ function lockPage() {
     // ------------------------------------------------------
     const style =
         document.createElement("style");
+
+    style.id =
+        "ag-lock-style";
 
     style.textContent = `
 
@@ -457,8 +568,6 @@ function lockPage() {
 // 🧠 FINAL DECISION ENGINE
 // ==========================================================
 function evaluate() {
-
-    if (pageLocked) return;
 
     if (!navigator.onLine) return;
 
@@ -867,7 +976,14 @@ function inspectAdState() {
 
             legitAdRendered = true;
 
-            detectionScore = 0;
+            if (!lastAdRenderState) {
+                lastAdRenderState = true;
+                resetDetectionState();
+
+                if (pageLocked) {
+                    unlockPage();
+                }
+            }
 
             return;
         }
@@ -1143,17 +1259,28 @@ window.addEventListener(
 
 
 // ==========================================================
-// 🔄 MAIN CHECK CYCLE
+// 🛡️ FAST LOCAL WATCHDOG
 // ==========================================================
-async function runAllChecks() {
+function runLocalWatch() {
 
-    if (pageLocked) return;
+    if (!navigator.onLine) {
+        return;
+    }
 
 
     /*
-     * Positive evidence first.
+     * The watchdog continues running even
+     * while the page is locked.
      */
-    if (checkRealAdRender()) {
+    const rendered =
+        checkRealAdRender();
+
+
+    /*
+     * Real ad appeared.
+     * Remove the notice immediately.
+     */
+    if (rendered) {
         return;
     }
 
@@ -1166,15 +1293,54 @@ async function runAllChecks() {
     }
 
 
+    /*
+     * If locked, do NOT stop monitoring.
+     *
+     * We simply avoid repeating heavy detection
+     * work until a state change or network check
+     * supplies new evidence.
+     */
+    if (pageLocked) {
+        return;
+    }
+
+
     checkBrowserSignals();
 
     checkCosmetic();
 
+    evaluate();
+}
+
+
+// ==========================================================
+// 🌐 NETWORK WATCHDOG
+// ==========================================================
+async function runNetworkWatch() {
+
+    if (!navigator.onLine) {
+        return;
+    }
+
+
+    /*
+     * Network verification continues independently
+     * of the visual lock state.
+     */
     runPixelTest();
 
     await runFetchTest();
 
     evaluate();
+}
+
+
+// ==========================================================
+// 🔄 MAIN CHECK CYCLE
+// ==========================================================
+async function runAllChecks() {
+
+    runLocalWatch();
 }
 
 
@@ -1185,18 +1351,34 @@ function init() {
 
     setTimeout(() => {
 
-        runAllChecks();
+        /*
+         * Initial local check.
+         */
+        runLocalWatch();
 
 
         /*
-         * Balanced 1.5 second cycle.
+         * 🛡️ FAST WATCHDOG
+         *
+         * Actual ad state is checked every 500ms.
          */
         setInterval(
-            runAllChecks,
-            500
+            runLocalWatch,
+            LOCAL_WATCH_INTERVAL
         );
 
-    }, 500);
+
+        /*
+         * 🌐 NETWORK WATCHDOG
+         *
+         * Network checks run every 3 seconds.
+         */
+        setInterval(
+            runNetworkWatch,
+            NETWORK_WATCH_INTERVAL
+        );
+
+    }, 5);
 }
 
 
