@@ -8,7 +8,7 @@
         logoUrl:
             "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUY8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666",
 
-        title: "Hey Buddy!",
+        title: "Ad Blocker Detected!",
 
         message:
             "It looks like an ad or content blocker is preventing this page from loading properly. " +
