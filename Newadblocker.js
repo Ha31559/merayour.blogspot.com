@@ -11,14 +11,14 @@
         title: "Ad Blocker Detected!",
 
         message:
-            "It looks like an ad or content blocker is preventing this page from loading properly. " +
-            "Merayour is a free website supported by readers and advertising, which helps us keep our stories available without a subscription. " +
+            "It looks like an ad or content blocker is preventing this page from loading properly." +
+            "Merayour is a free website supported by readers and advertising, which helps us keep our stories available without a subscription." +
             "If you enjoy our stories, please consider Whitelisting or allowing ads on Merayour. " +
-            "Once your blocker is disabled for this site, you can Refresh and continue reading normally."
+    "Once your blocker is disabled for this site, you can Refresh and continue reading normally"
     };
 
     // ==========================================================
-    // 🧠 MAXIMUM DETECTION WEIGHTS
+    // 🧠 DETECTION WEIGHTS
     // ==========================================================
     const WEIGHTS = {
         CRITICAL: 70,
@@ -31,10 +31,16 @@
     // 🎯 ENGINE STATE
     // ==========================================================
     let detectionScore = 0;
+
     let legitAdRendered = false;
+
     let pageLocked = false;
 
     let blockerState = "UNKNOWN";
+
+    let lastAdRenderTime = 0;
+
+    let missingAdChecks = 0;
 
     const incidentMap = new Map();
 
@@ -67,11 +73,13 @@
 
     const NETWORK_WATCH_INTERVAL = 1000;
 
+    const AD_MISSING_CONFIRMATIONS = 4;
+
     const delayedChecks = [
+        300,
         800,
         1500,
-        3000,
-        5000
+        3000
     ];
 
     const nowReady = () =>
@@ -87,6 +95,7 @@
         (navigator.vendor || "").toLowerCase();
 
     const browser = {
+
         soul:
             ua.includes("soul") ||
             !!window.soul ||
@@ -125,10 +134,19 @@
         browser.safari;
 
     // ==========================================================
-    // 🎚️ THRESHOLD
+    // 🎚️ INTELLIGENT THRESHOLD
     // ==========================================================
     function getThreshold() {
 
+        /*
+         * Before a legitimate ad has rendered:
+         *
+         * Standard browser = 85
+         * Other browser     = 90
+         *
+         * After a real ad has rendered, the detector
+         * becomes much more conservative.
+         */
         let threshold =
             knownStandardBrowser
                 ? 85
@@ -173,6 +191,26 @@
     }, 1000);
 
     // ==========================================================
+    // 🧹 CLEAR SUSPICION
+    // ==========================================================
+    function clearDetectionEvidence() {
+
+        detectionScore = 0;
+
+        incidentMap.clear();
+
+        Object.keys(categoryState)
+            .forEach(key => {
+                categoryState[key] = false;
+            });
+
+        Object.keys(evidenceMap)
+            .forEach(key => {
+                evidenceMap[key].clear();
+            });
+    }
+
+    // ==========================================================
     // ⭐ REAL ADSENSE RENDER
     // ==========================================================
     function checkRealAdRender() {
@@ -210,19 +248,12 @@
 
             legitAdRendered = true;
 
-            detectionScore = 0;
+            lastAdRenderTime =
+                performance.now();
 
-            incidentMap.clear();
+            missingAdChecks = 0;
 
-            Object.keys(categoryState)
-                .forEach(key => {
-                    categoryState[key] = false;
-                });
-
-            Object.keys(evidenceMap)
-                .forEach(key => {
-                    evidenceMap[key].clear();
-                });
+            clearDetectionEvidence();
 
             blockerState =
                 "AD_RENDERED";
@@ -234,7 +265,7 @@
     }
 
     // ==========================================================
-    // 🔓 UNLOCK
+    // 🔓 UNLOCK PAGE
     // ==========================================================
     function unlockPage() {
 
@@ -249,9 +280,10 @@
 
         /*
          * IMPORTANT:
-         * Remove the lock stylesheet itself.
+         *
+         * Remove the actual lock stylesheet.
          * Otherwise overflow:hidden !important
-         * can remain active after unlocking.
+         * can continue blocking page scrolling.
          */
         const lockStyle =
             document.getElementById(
@@ -264,27 +296,41 @@
 
         pageLocked = false;
 
-        document.documentElement.style
-            .removeProperty("overflow");
+        if (document.documentElement) {
 
-        document.body.style
-            .removeProperty("overflow");
+            document.documentElement.style
+                .removeProperty(
+                    "overflow"
+                );
 
-        document.documentElement.style
-            .removeProperty("height");
+            document.documentElement.style
+                .removeProperty(
+                    "height"
+                );
 
-        document.body.style
-            .removeProperty("height");
+            document.documentElement.style
+                .removeProperty(
+                    "user-select"
+                );
+        }
 
-        document.documentElement.style
-            .removeProperty(
-                "user-select"
-            );
+        if (document.body) {
 
-        document.body.style
-            .removeProperty(
-                "user-select"
-            );
+            document.body.style
+                .removeProperty(
+                    "overflow"
+                );
+
+            document.body.style
+                .removeProperty(
+                    "height"
+                );
+
+            document.body.style
+                .removeProperty(
+                    "user-select"
+                );
+        }
     }
 
     // ==========================================================
@@ -338,19 +384,17 @@
             return;
         }
 
-        /*
-         * IMPORTANT:
-         * Give the lock style a stable ID so
-         * unlockPage() can remove it completely.
-         */
-        const oldStyle =
+        // ------------------------------------------------------
+        // LOCK STYLE
+        // ------------------------------------------------------
+        let style =
             document.getElementById(
                 "ag-lock-style"
             );
 
-        if (!oldStyle) {
+        if (!style) {
 
-            const style =
+            style =
                 document.createElement(
                     "style"
                 );
@@ -432,15 +476,21 @@
 
                 #ag-lock-overlay h1 {
                     margin: 0 0 12px;
+
                     font-size: 22px;
+
                     color: #f0f6fc;
+
                     font-weight: 600;
                 }
 
                 #ag-lock-overlay p {
                     margin: 0;
+
                     font-size: 14px;
+
                     color: #8b949e;
+
                     line-height: 1.6;
                 }
             `;
@@ -450,6 +500,9 @@
             );
         }
 
+        // ------------------------------------------------------
+        // OVERLAY
+        // ------------------------------------------------------
         const overlay =
             document.createElement(
                 "div"
@@ -472,6 +525,7 @@
 
         overlay.innerHTML = `
             <div class="ag-card">
+
                 ${logo}
 
                 <h1>
@@ -481,6 +535,7 @@
                 <p>
                     ${CONFIG.message}
                 </p>
+
             </div>
         `;
 
@@ -509,7 +564,7 @@
         }
 
         /*
-         * REAL AD ALWAYS WINS.
+         * Real advertisement always wins.
          */
         if (
             checkRealAdRender()
@@ -532,7 +587,7 @@
         const cosmetic =
             evidenceMap.DOM_COSMETIC.size;
 
-        const browser =
+        const browserEvidence =
             evidenceMap.BROWSER_ENGINE.size;
 
         const resource =
@@ -541,31 +596,52 @@
         const removal =
             evidenceMap.REMOVAL.size;
 
+        /*
+         * PRIMARY CORRELATION
+         */
         const networkDom =
             network > 0 &&
             cosmetic > 0;
 
+        /*
+         * NETWORK + REMOVAL
+         */
         const removalNetwork =
-            removal > 0 &&
-            network > 0;
+            network > 0 &&
+            removal > 0;
 
+        /*
+         * RESOURCE + DOM
+         */
         const resourceDom =
             resource > 0 &&
             cosmetic > 0;
 
+        /*
+         * STRONG MULTI-SIGNAL
+         */
         const multiSignal =
             network > 0 &&
             cosmetic > 0 &&
             (
                 resource > 0 ||
                 removal > 0 ||
-                browser > 0
+                browserEvidence > 0
             );
 
+        /*
+         * Final lock requires:
+         *
+         * 1. High score
+         * 2. At least two independent categories
+         * 3. A meaningful correlation
+         */
         if (
             detectionScore >=
                 getThreshold() &&
+
             categories >= 2 &&
+
             (
                 networkDom ||
                 removalNetwork ||
@@ -598,6 +674,9 @@
         const now =
             performance.now();
 
+        /*
+         * Deduplicate repeated signals.
+         */
         if (
             incidentMap.has(id) &&
             now -
@@ -634,57 +713,55 @@
             );
         }
 
+        /*
+         * NETWORK + DOM
+         */
         if (
-            evidenceMap.NETWORK.size >
-                0 &&
-            evidenceMap.DOM_COSMETIC.size >
-                0
+            evidenceMap.NETWORK.size > 0 &&
+            evidenceMap.DOM_COSMETIC.size > 0
         ) {
 
-            detectionScore +=
-                25;
+            detectionScore += 25;
         }
 
+        /*
+         * NETWORK + REMOVAL
+         */
         if (
-            evidenceMap.NETWORK.size >
-                0 &&
-            evidenceMap.REMOVAL.size >
-                0
+            evidenceMap.NETWORK.size > 0 &&
+            evidenceMap.REMOVAL.size > 0
         ) {
 
-            detectionScore +=
-                25;
+            detectionScore += 25;
         }
 
+        /*
+         * RESOURCE + DOM
+         */
         if (
-            evidenceMap.RESOURCE.size >
-                0 &&
-            evidenceMap.DOM_COSMETIC.size >
-                0
+            evidenceMap.RESOURCE.size > 0 &&
+            evidenceMap.DOM_COSMETIC.size > 0
         ) {
 
-            detectionScore +=
-                20;
+            detectionScore += 20;
         }
 
+        /*
+         * Full four-signal correlation.
+         */
         if (
-            evidenceMap.NETWORK.size >
-                0 &&
-            evidenceMap.DOM_COSMETIC.size >
-                0 &&
-            evidenceMap.RESOURCE.size >
-                0 &&
-            evidenceMap.REMOVAL.size >
-                0
+            evidenceMap.NETWORK.size > 0 &&
+            evidenceMap.DOM_COSMETIC.size > 0 &&
+            evidenceMap.RESOURCE.size > 0 &&
+            evidenceMap.REMOVAL.size > 0
         ) {
 
-            detectionScore +=
-                30;
+            detectionScore += 30;
         }
 
         setTimeout(
             evaluate,
-            1000
+            300
         );
     }
 
@@ -712,33 +789,32 @@
     // ==========================================================
     function createBaits() {
 
-        const existing =
-            document.querySelectorAll(
-                "[data-ag-bait]"
-            );
-
-        if (
-            existing.length >= 3
-        ) {
-            return;
-        }
-
         const baitConfigs = [
+
             {
-                id: "ag-ad-bait-1",
+                id:
+                    "ag-ad-bait-1",
+
                 classes:
                     "adsbygoogle ad-banner ad-unit google-ad"
             },
+
             {
-                id: "ag-ad-bait-2",
+                id:
+                    "ag-ad-bait-2",
+
                 classes:
                     "advertisement ad adsbox text-ad"
             },
+
             {
-                id: "ag-ad-bait-3",
+                id:
+                    "ag-ad-bait-3",
+
                 classes:
                     "ad-container ad-placement ad-slot"
             }
+
         ];
 
         baitConfigs.forEach(
@@ -802,6 +878,11 @@
         targets.forEach(
             element => {
 
+                /*
+                 * ----------------------------------------------
+                 * BAIT CHECK
+                 * ----------------------------------------------
+                 */
                 if (
                     element.dataset.agBait ===
                     "true"
@@ -858,6 +939,11 @@
                     return;
                 }
 
+                /*
+                 * ----------------------------------------------
+                 * REAL AD SLOT CHECK
+                 * ----------------------------------------------
+                 */
                 if (
                     element.matches(
                         "ins.adsbygoogle, .adsbygoogle"
@@ -882,6 +968,9 @@
                         }
                     }
 
+                    /*
+                     * Unfilled is neutral.
+                     */
                     if (
                         element.getAttribute(
                             "data-ad-status"
@@ -921,9 +1010,7 @@
 
                             registerIncident(
                                 "cosmetic:ad:" +
-                                    Math.random()
-                                        .toString(36)
-                                        .slice(2),
+                                    element.id,
                                 "STRONG",
                                 "DOM_COSMETIC",
                                 "hidden_ad"
@@ -947,6 +1034,9 @@
 
         let score = 0;
 
+        /*
+         * Soul
+         */
         if (
             browser.soul
         ) {
@@ -965,18 +1055,27 @@
             score += 40;
         }
 
+        /*
+         * Brave remains supporting evidence.
+         */
         if (
             browser.brave
         ) {
             score += 10;
         }
 
+        /*
+         * Opera remains supporting evidence.
+         */
         if (
             browser.opera
         ) {
             score += 5;
         }
 
+        /*
+         * Browser evidence NEVER locks by itself.
+         */
         if (
             score >= 60
         ) {
@@ -1002,7 +1101,7 @@
     }
 
     // ==========================================================
-    // 📦 MULTI SLOT AD INSPECTION
+    // 📦 AD STATE INSPECTION
     // ==========================================================
     function inspectAdState() {
 
@@ -1012,6 +1111,8 @@
             );
 
         let visibleAds = 0;
+
+        let usableAdSlot = false;
 
         ads.forEach(
             ad => {
@@ -1033,39 +1134,32 @@
 
                         visibleAds++;
 
+                        usableAdSlot = true;
+
                         legitAdRendered =
                             true;
+
+                        lastAdRenderTime =
+                            performance.now();
+
+                        missingAdChecks = 0;
                     }
                 }
 
                 if (
                     ad.getAttribute(
                         "data-ad-status"
-                    ) === "unfilled"
+                    ) !== "unfilled"
                 ) {
-                    return;
+                    usableAdSlot = true;
                 }
             }
         );
 
         /*
-         * IMPORTANT STATE RECOVERY:
-         *
-         * If an ad had previously rendered but
-         * no visible real ad remains, release the
-         * permanent legitAdRendered state.
-         *
-         * This allows the existing detector to work
-         * again if the user turns the blocker back on.
+         * A currently visible real ad is
+         * always positive evidence.
          */
-        if (
-            legitAdRendered &&
-            visibleAds === 0
-        ) {
-
-            legitAdRendered = false;
-        }
-
         if (
             visibleAds > 0
         ) {
@@ -1073,19 +1167,56 @@
             detectionScore = 0;
 
             unlockPage();
+
+            return;
+        }
+
+        /*
+         * ------------------------------------------------------
+         * RE-BLOCK VERIFICATION
+         * ------------------------------------------------------
+         *
+         * Do NOT immediately reset legitAdRendered just
+         * because an ad is temporarily missing.
+         *
+         * Require several consecutive checks.
+         */
+        if (
+            legitAdRendered &&
+            usableAdSlot
+        ) {
+
+            missingAdChecks++;
+
+            if (
+                missingAdChecks >=
+                AD_MISSING_CONFIRMATIONS
+            ) {
+
+                /*
+                 * Only now allow the detection engine
+                 * to become active again.
+                 */
+                legitAdRendered = false;
+
+                missingAdChecks = 0;
+
+                blockerState =
+                    "MONITORING";
+
+                clearDetectionEvidence();
+            }
         }
     }
 
     // ==========================================================
-    // 🚨 SCRIPT / RESOURCE ERROR MONITOR
+    // 🚨 RESOURCE ERROR MONITOR
     // ==========================================================
     window.addEventListener(
         "error",
         function (event) {
 
-            if (
-                !event
-            ) {
+            if (!event) {
                 return;
             }
 
@@ -1103,8 +1234,7 @@
             ) {
 
                 registerIncident(
-                    "resource:error:" +
-                        src,
+                    "resource:error:" + src,
                     "STRONG",
                     "RESOURCE",
                     "resource_error"
@@ -1169,8 +1299,7 @@
                             );
 
                             registerIncident(
-                                "xhr:error:" +
-                                    url,
+                                "xhr:error:" + url,
                                 "STRONG",
                                 "RESOURCE",
                                 "xhr_error"
@@ -1246,8 +1375,7 @@
                                 );
 
                                 registerIncident(
-                                    "fetch:error:" +
-                                        url,
+                                    "fetch:error:" + url,
                                     "STRONG",
                                     "RESOURCE",
                                     "fetch_error"
@@ -1343,9 +1471,8 @@
                 "removed:" +
                     (
                         node.id ||
-                        Math.random()
-                            .toString(36)
-                            .slice(2)
+                        node.className ||
+                        "ad-node"
                     ),
                 "STRONG",
                 "REMOVAL",
@@ -1366,12 +1493,18 @@
                     mutations.forEach(
                         mutation => {
 
+                            /*
+                             * Removed nodes
+                             */
                             mutation
                                 .removedNodes
                                 .forEach(
                                     inspectRemovedNode
                                 );
 
+                            /*
+                             * Added suspicious nodes
+                             */
                             mutation
                                 .addedNodes
                                 .forEach(
@@ -1387,6 +1520,9 @@
                                         const suspicious =
                                             node.matches?.(
                                                 ".adsbygoogle, ins.adsbygoogle, iframe"
+                                            ) ||
+                                            node.querySelector?.(
+                                                ".adsbygoogle, ins.adsbygoogle"
                                             );
 
                                         if (
@@ -1398,7 +1534,11 @@
 
                                                     checkRealAdRender();
 
+                                                    inspectAdState();
+
                                                     checkCosmetic();
+
+                                                    evaluate();
 
                                                 },
                                                 150
@@ -1474,7 +1614,7 @@
         }
 
         /*
-         * Real ad always has priority.
+         * Real ad has priority.
          */
         if (
             checkRealAdRender()
@@ -1491,8 +1631,7 @@
         }
 
         /*
-         * Continue watching even
-         * while page is locked.
+         * Continue even when page is locked.
          */
         checkCosmetic();
 
@@ -1540,7 +1679,7 @@
                 scheduleDelayedVerification();
 
                 /*
-                 * FAST WATCHDOG
+                 * LOCAL MONITOR
                  */
                 setInterval(
                     runLocalWatch,
@@ -1548,7 +1687,7 @@
                 );
 
                 /*
-                 * NETWORK WATCHDOG
+                 * NETWORK MONITOR
                  */
                 setInterval(
                     runNetworkWatch,
