@@ -63,23 +63,23 @@
     // ==========================================================
     // ⏱️ TIMING
     // ==========================================================
-    const INITIAL_GRACE = 250;
+    const INITIAL_GRACE = 800;
 
     const INCIDENT_TTL = 2500;
 
     const INCIDENT_COOLDOWN = 1200;
 
-    const LOCAL_WATCH_INTERVAL = 350;
+    const LOCAL_WATCH_INTERVAL = 500;
 
-    const NETWORK_WATCH_INTERVAL = 1000;
+    const NETWORK_WATCH_INTERVAL = 3000;
 
     const AD_MISSING_CONFIRMATIONS = 4;
 
     const delayedChecks = [
-        300,
         800,
         1500,
-        3000
+        3000,
+        5000
     ];
 
     const nowReady = () =>
