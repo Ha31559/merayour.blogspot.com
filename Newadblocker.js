@@ -57,21 +57,21 @@
     // ==========================================================
     // ⏱️ TIMING
     // ==========================================================
-    const INITIAL_GRACE = 100;
+    const INITIAL_GRACE = 800;
 
-    const INCIDENT_TTL = 500;
+    const INCIDENT_TTL = 2500;
 
-    const INCIDENT_COOLDOWN = 100;
+    const INCIDENT_COOLDOWN = 1200;
 
-    const LOCAL_WATCH_INTERVAL = 100;
+    const LOCAL_WATCH_INTERVAL = 350;
 
-    const NETWORK_WATCH_INTERVAL = 100;
+    const NETWORK_WATCH_INTERVAL = 3000;
 
     const delayedChecks = [
-        500,
-        300,
-        600,
-        1000
+        800,
+        1500,
+        3000,
+        5000
     ];
 
     const nowReady = () =>
@@ -131,8 +131,8 @@
 
         let threshold =
             knownStandardBrowser
-                ? 60
-                : 70;
+                ? 85
+                : 90;
 
         /*
          * Once a real ad has rendered,
@@ -692,7 +692,7 @@
 
         setTimeout(
             evaluate,
-            100
+            1000
         );
     }
 
