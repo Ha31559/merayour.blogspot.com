@@ -134,11 +134,6 @@
                 ? 85
                 : 90;
 
-        /*
-         * Once a real ad has rendered,
-         * detection must become extremely difficult
-         * to trigger again.
-         */
         if (legitAdRendered) {
             threshold = 160;
         }
@@ -207,7 +202,6 @@
                 rect.width > 0 &&
                 rect.height > 0
             ) {
-
                 rendered = true;
             }
         });
@@ -253,6 +247,21 @@
             overlay.remove();
         }
 
+        /*
+         * IMPORTANT:
+         * Remove the lock stylesheet itself.
+         * Otherwise overflow:hidden !important
+         * can remain active after unlocking.
+         */
+        const lockStyle =
+            document.getElementById(
+                "ag-lock-style"
+            );
+
+        if (lockStyle) {
+            lockStyle.remove();
+        }
+
         pageLocked = false;
 
         document.documentElement.style
@@ -296,9 +305,6 @@
         blockerState =
             "CONFIRMED";
 
-        /*
-         * Original content lock retained.
-         */
         const mainContent =
             document.querySelector(
                 "article, .post-body, .entry-content, main, #main-content"
@@ -332,6 +338,11 @@
             return;
         }
 
+        /*
+         * IMPORTANT:
+         * Give the lock style a stable ID so
+         * unlockPage() can remove it completely.
+         */
         const oldStyle =
             document.getElementById(
                 "ag-lock-style"
@@ -351,7 +362,8 @@
                 html,
                 body {
                     overflow: hidden !important;
-                                     -webkit-user-select: none !important;
+
+                    -webkit-user-select: none !important;
                     -moz-user-select: none !important;
                     -ms-user-select: none !important;
                     user-select: none !important;
@@ -529,9 +541,6 @@
         const removal =
             evidenceMap.REMOVAL.size;
 
-        /*
-         * Strong independent correlations.
-         */
         const networkDom =
             network > 0 &&
             cosmetic > 0;
@@ -553,9 +562,6 @@
                 browser > 0
             );
 
-        /*
-         * Maximum-power decision.
-         */
         if (
             detectionScore >=
                 getThreshold() &&
@@ -628,9 +634,6 @@
             );
         }
 
-        /*
-         * Network + DOM correlation.
-         */
         if (
             evidenceMap.NETWORK.size >
                 0 &&
@@ -642,9 +645,6 @@
                 25;
         }
 
-        /*
-         * Network + removal correlation.
-         */
         if (
             evidenceMap.NETWORK.size >
                 0 &&
@@ -656,9 +656,6 @@
                 25;
         }
 
-        /*
-         * Resource + DOM correlation.
-         */
         if (
             evidenceMap.RESOURCE.size >
                 0 &&
@@ -670,9 +667,6 @@
                 20;
         }
 
-        /*
-         * Full correlation.
-         */
         if (
             evidenceMap.NETWORK.size >
                 0 &&
@@ -864,9 +858,6 @@
                     return;
                 }
 
-                /*
-                 * Real AdSense slot.
-                 */
                 if (
                     element.matches(
                         "ins.adsbygoogle, .adsbygoogle"
@@ -891,9 +882,6 @@
                         }
                     }
 
-                    /*
-                     * Unfilled = neutral.
-                     */
                     if (
                         element.getAttribute(
                             "data-ad-status"
@@ -1060,9 +1048,26 @@
             }
         );
 
+        /*
+         * IMPORTANT STATE RECOVERY:
+         *
+         * If an ad had previously rendered but
+         * no visible real ad remains, release the
+         * permanent legitAdRendered state.
+         *
+         * This allows the existing detector to work
+         * again if the user turns the blocker back on.
+         */
         if (
-            visibleAds > 0 ||
-            legitAdRendered
+            legitAdRendered &&
+            visibleAds === 0
+        ) {
+
+            legitAdRendered = false;
+        }
+
+        if (
+            visibleAds > 0
         ) {
 
             detectionScore = 0;
