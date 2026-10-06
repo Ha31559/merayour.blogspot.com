@@ -351,9 +351,7 @@
                 html,
                 body {
                     overflow: hidden !important;
-                    height: 100% !important;
-
-                    -webkit-user-select: none !important;
+                                     -webkit-user-select: none !important;
                     -moz-user-select: none !important;
                     -ms-user-select: none !important;
                     user-select: none !important;
