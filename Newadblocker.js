@@ -57,7 +57,7 @@
     // ==========================================================
     // ⏱️ TIMING
     // ==========================================================
-    const INITIAL_GRACE = 800;
+    const INITIAL_GRACE = 250;
 
     const INCIDENT_TTL = 2500;
 
@@ -65,7 +65,7 @@
 
     const LOCAL_WATCH_INTERVAL = 350;
 
-    const NETWORK_WATCH_INTERVAL = 3000;
+    const NETWORK_WATCH_INTERVAL = 1000;
 
     const delayedChecks = [
         800,
