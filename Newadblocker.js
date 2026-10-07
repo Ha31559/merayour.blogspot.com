@@ -2,17 +2,16 @@
     "use strict";
 
     // ==========================================================
-    // MERAYOUR ADGUARD v2.2.1 - FALSE POSITIVE FIXED
+    // MERAYOUR ADGUARD v2.2.2 - STRICT ZERO FALSE-POSITIVE ENGINE
     // ==========================================================
 
+    // 🛑 DUPLICATE GUARD
     if (window.__MERAYOUR_ADGUARD_ACTIVE__) {
         return;
     }
     window.__MERAYOUR_ADGUARD_ACTIVE__ = true;
 
-    // ==========================================================
     // 🛑 BLOGGER PREVIEW / EDITOR BYPASS
-    // ==========================================================
     function isBloggerPreview() {
         const host = (location.hostname || "").toLowerCase();
         const href = (location.href || "").toLowerCase();
@@ -59,9 +58,7 @@
         return;
     }
 
-    // ==========================================================
     // ⚙️ CONFIGURATION
-    // ==========================================================
     const CONFIG = {
         logoUrl:
             "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUY8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666",
@@ -73,9 +70,7 @@
             "Once your blocker is disabled for this site, you can continue reading normally."
     };
 
-    // ==========================================================
     // ⚖️ DETECTION WEIGHTS
-    // ==========================================================
     const WEIGHTS = {
         CRITICAL: 50,
         STRONG: 30,
@@ -83,9 +78,7 @@
         WEAK: 10
     };
 
-    // ==========================================================
     // 🧠 CORE STATE
-    // ==========================================================
     let detectionScore = 0;
     let legitAdRendered = false;
     let pageLocked = false;
@@ -114,11 +107,9 @@
         GOOGLE_ECOSYSTEM: false
     };
 
-    // ==========================================================
     // ⏱️ TIMING & CONFIRMATIONS
-    // ==========================================================
-    const INITIAL_GRACE = 4000;
-    const ADSENSE_LOAD_GRACE = 10000;
+    const INITIAL_GRACE = 3500;
+    const ADSENSE_LOAD_GRACE = 9000;
     const INCIDENT_TTL = 4000;
     const INCIDENT_COOLDOWN = 2000;
     const LOCAL_WATCH_INTERVAL = 1500;
@@ -126,11 +117,8 @@
     const AD_MISSING_CONFIRMATIONS = 6;
     const REBLOCK_GRACE = 5000;
     const CLEAN_CONFIRMATIONS_REQUIRED = 2;
-    const delayedChecks = [4000, 7000, 10000];
 
-    // ==========================================================
     // 🧠 ARTICLE RENDER STATE
-    // ==========================================================
     let mainContent = null;
     let originalArticleHTML = null;
     let originalArticleCaptured = false;
@@ -163,25 +151,11 @@
     }
 
     function nowReady() {
-        const elapsed = performance.now() - pageLoadStart;
-        return elapsed >= ADSENSE_LOAD_GRACE;
+        return performance.now() - pageLoadStart >= ADSENSE_LOAD_GRACE;
     }
 
-    const ua = (navigator.userAgent || "").toLowerCase();
-    const vendor = (navigator.vendor || "").toLowerCase();
-
-    const browser = {
-        soul: ua.includes("soul") || !!window.soul || !!window.__soul_ext__,
-        brave: !!(navigator.brave && typeof navigator.brave.isBrave === "function"),
-        opera: ua.includes("opera") || ua.includes("opr/"),
-        chrome: !!window.chrome && vendor.includes("google"),
-        edge: ua.includes("edg/"),
-        firefox: ua.includes("firefox"),
-        safari: /safari/.test(ua) && !/chrome|crios|android/.test(ua)
-    };
-
     function getThreshold() {
-        return 140; // Strict threshold to eliminate false positives
+        return 130;
     }
 
     setInterval(() => {
@@ -210,9 +184,7 @@
         });
     }
 
-    // ==========================================================
-    // 🟢 REAL AD RENDER DETECTION
-    // ==========================================================
+    // 🟢 REAL AD RENDER DETECTION (INSTANT OVERRIDE)
     function checkRealAdRender() {
         const ads = document.querySelectorAll("ins.adsbygoogle, .adsbygoogle");
         let rendered = false;
@@ -397,9 +369,7 @@
         }
     }
 
-    // ==========================================================
     // 🧠 INTELLIGENT PROBE CONFIG
-    // ==========================================================
     const PROBE_CONFIG = {
         MAX_CYCLES: 2,
         MIN_INTERVAL: 8000,
@@ -483,7 +453,7 @@
                 resolve(false);
             };
 
-            const token = "ag221-" + probeState.pixelAttempts;
+            const token = "ag222-" + probeState.pixelAttempts;
             pixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?ag=" + encodeURIComponent(token);
         });
     }
@@ -504,7 +474,7 @@
         }
 
         try {
-            const token = "ag221-" + probeState.fetchAttempts;
+            const token = "ag222-" + probeState.fetchAttempts;
             const url = "https://pagead2.googlesyndication.com/pagead/img/0.gif?ag=" + encodeURIComponent(token);
             await window.fetch(url, {
                 method: "GET",
@@ -550,16 +520,15 @@
         probeState.stopped = true;
     }
 
-    // ==========================================================
-    // 🌐 FIXED GOOGLE ECOSYSTEM CHECK
-    // ==========================================================
+    // 🌐 FIXED GOOGLE ECOSYSTEM CHECK (SAFE FOR NORMAL BROWSERS)
     function checkGoogleEcosystem() {
         if (performance.now() - pageLoadStart < ADSENSE_LOAD_GRACE) return;
 
-        // ONLY flag if adsbygoogle script fails to load AND network errors occur
         const adsenseScriptMissing = typeof window.adsbygoogle === "undefined";
+        const networkFailure = evidenceMap.RESOURCE.has("resource_error") || evidenceMap.NETWORK.size > 0;
 
-        if (adsenseScriptMissing && evidenceMap.RESOURCE.size > 0) {
+        // CRITICAL: Only flag ecosystem block if AdSense script is missing AND network failure is registered
+        if (adsenseScriptMissing && networkFailure) {
             registerIncident(
                 "google:ecosystem:adsense_blocked",
                 "CRITICAL",
@@ -677,9 +646,7 @@
         }
     }
 
-    // ==========================================================
     // 🚨 RESOURCE ERROR & NETWORK MONITORS
-    // ==========================================================
     window.addEventListener(
         "error",
         function (event) {
@@ -695,18 +662,60 @@
         true
     );
 
-    // ==========================================================
-    // 🧠 STRICT DECISION ENGINE (ZERO FALSE POSITIVE RULE)
-    // ==========================================================
+    (function installXHR() {
+        const originalOpen = XMLHttpRequest.prototype.open;
+        const originalSend = XMLHttpRequest.prototype.send;
+
+        XMLHttpRequest.prototype.open = function (method, url) {
+            this.__ag_url = typeof url === "string" ? url : "";
+            return originalOpen.apply(this, arguments);
+        };
+
+        XMLHttpRequest.prototype.send = function () {
+            this.addEventListener("error", () => {
+                const url = this.__ag_url || "";
+                if (/pagead2|googlesyndication|doubleclick|googleadservices/i.test(url)) {
+                    networkIncident("xhr");
+                    registerIncident("xhr:error:" + url, "STRONG", "RESOURCE", "xhr_error");
+                }
+            });
+            return originalSend.apply(this, arguments);
+        };
+    })();
+
+    (function installFetchInterceptor() {
+        if (!window.fetch) return;
+        const originalFetch = window.fetch;
+
+        window.fetch = function (...args) {
+            const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
+
+            return originalFetch.apply(this, args)
+                .then((response) => {
+                    if (!response.ok && response.type !== "opaque" && /pagead2|googlesyndication|doubleclick|googleadservices/i.test(url)) {
+                        networkIncident("fetch-status");
+                    }
+                    return response;
+                })
+                .catch((error) => {
+                    if (/pagead2|googlesyndication|doubleclick|googleadservices/i.test(url)) {
+                        networkIncident("fetch");
+                        registerIncident("fetch:error:" + url, "STRONG", "RESOURCE", "fetch_error");
+                    }
+                    throw error;
+                });
+        };
+    })();
+
+    // 🧠 STRICT DECISION ENGINE (DOUBLE PROOF MANDATORY RULE)
     function detectBlockState() {
         const categories = Object.values(categoryState).filter(Boolean).length;
 
-        const network = evidenceMap.NETWORK.size > 0 || evidenceMap.RESOURCE.size > 0;
-        const cosmetic = evidenceMap.DOM_COSMETIC.size > 0;
-        const googleEco = evidenceMap.GOOGLE_ECOSYSTEM.size > 0;
+        const hasNetworkOrResourceBlock = evidenceMap.NETWORK.size > 0 || evidenceMap.RESOURCE.size > 0 || evidenceMap.GOOGLE_ECOSYSTEM.size > 0;
+        const hasCosmeticBlock = evidenceMap.DOM_COSMETIC.size > 0;
 
-        // CRITICAL RULE: Popup REQUIRES network/resource blocking AND cosmetic blocking simultaneously
-        const strictCoordinatedBlocking = (network || googleEco) && cosmetic;
+        // MANDATORY RULE: Must have both network blocking proof AND cosmetic element blocking simultaneously
+        const strictCoordinatedBlocking = hasNetworkOrResourceBlock && hasCosmeticBlock;
 
         if (detectionScore >= getThreshold() && categories >= 2 && strictCoordinatedBlocking) {
             blockStateConfirmations++;
