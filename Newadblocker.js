@@ -1,22 +1,17 @@
 (function () {
     "use strict";
 
-        // ==========================================================
+    // ==========================================================
     // 🛑 BLOGGER PREVIEW BYPASS
     // ==========================================================
     function isBloggerPreview() {
 
         const host =
-            (window.location.hostname || "")
-                .toLowerCase();
+            (window.location.hostname || "").toLowerCase();
 
         const path =
-            (window.location.pathname || "")
-                .toLowerCase();
+            (window.location.pathname || "").toLowerCase();
 
-        /*
-         * Blogger editor / post preview
-         */
         if (
             host === "www.blogger.com" ||
             host.endsWith(".blogger.com")
@@ -24,9 +19,6 @@
             return true;
         }
 
-        /*
-         * Blogger blog post preview
-         */
         if (
             path.includes("/b/post-preview") ||
             path.includes("/blog/post/edit/preview/")
@@ -37,39 +29,29 @@
         return false;
     }
 
-    /*
-     * IMPORTANT:
-     *
-     * If this is Blogger Preview,
-     * completely stop the detector.
-     *
-     * No bait
-     * No network test
-     * No popup
-     * No page lock
-     * No DOM modification
-     * No timers
-     */
     if (isBloggerPreview()) {
         return;
     }
 
-    
+
     // ==========================================================
     // ⚙️ CONFIGURATION
     // ==========================================================
     const CONFIG = {
+
         logoUrl:
             "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUY8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666",
 
-        title: "Ad Blocker Detected!",
+        title:
+            "Ad Blocker Detected!",
 
         message:
-            "It looks like an ad or content blocker is preventing this page from loading properly." +
-            "Merayour is a free website supported by readers and advertising, which helps us keep our stories available without a subscription." +
+            "It looks like an ad or content blocker is preventing this page from loading properly. " +
+            "Merayour is a free website supported by readers and advertising, which helps us keep our stories available without a subscription. " +
             "If you enjoy our stories, please consider Whitelisting or allowing ads on Merayour. " +
-    "Once your blocker is disabled for this site, you can Refresh and continue reading normally"
+            "Once your blocker is disabled for this site, you can Refresh and continue reading normally."
     };
+
 
     // ==========================================================
     // 🧠 DETECTION WEIGHTS
@@ -80,6 +62,7 @@
         MEDIUM: 30,
         WEAK: 10
     };
+
 
     // ==========================================================
     // 🎯 ENGINE STATE
@@ -98,21 +81,36 @@
 
     const incidentMap = new Map();
 
+    const correlationMap = new Set();
+
+
     const evidenceMap = {
+
         NETWORK: new Set(),
+
         DOM_COSMETIC: new Set(),
+
         BROWSER_ENGINE: new Set(),
+
         RESOURCE: new Set(),
+
         REMOVAL: new Set()
     };
 
+
     const categoryState = {
+
         NETWORK: false,
+
         DOM_COSMETIC: false,
+
         BROWSER_ENGINE: false,
+
         RESOURCE: false,
+
         REMOVAL: false
     };
+
 
     // ==========================================================
     // ⏱️ TIMING
@@ -125,7 +123,7 @@
 
     const LOCAL_WATCH_INTERVAL = 500;
 
-    const NETWORK_WATCH_INTERVAL = 3000;
+    const NETWORK_WATCH_INTERVAL = 4000;
 
     const AD_MISSING_CONFIRMATIONS = 4;
 
@@ -136,8 +134,10 @@
         5000
     ];
 
+
     const nowReady = () =>
         performance.now() >= INITIAL_GRACE;
+
 
     // ==========================================================
     // 🌐 BROWSER CLASSIFICATION
@@ -147,6 +147,7 @@
 
     const vendor =
         (navigator.vendor || "").toLowerCase();
+
 
     const browser = {
 
@@ -181,26 +182,19 @@
             !/chrome|crios|android/.test(ua)
     };
 
+
     const knownStandardBrowser =
         browser.chrome ||
         browser.edge ||
         browser.firefox ||
         browser.safari;
 
+
     // ==========================================================
     // 🎚️ INTELLIGENT THRESHOLD
     // ==========================================================
     function getThreshold() {
 
-        /*
-         * Before a legitimate ad has rendered:
-         *
-         * Standard browser = 85
-         * Other browser     = 90
-         *
-         * After a real ad has rendered, the detector
-         * becomes much more conservative.
-         */
         let threshold =
             knownStandardBrowser
                 ? 85
@@ -212,6 +206,7 @@
 
         return threshold;
     }
+
 
     // ==========================================================
     // 🧹 EVIDENCE DECAY
@@ -228,10 +223,12 @@
                     now - timestamp >
                     INCIDENT_TTL
                 ) {
+
                     incidentMap.delete(id);
                 }
             }
         );
+
 
         if (detectionScore > 0) {
 
@@ -244,6 +241,7 @@
 
     }, 1000);
 
+
     // ==========================================================
     // 🧹 CLEAR SUSPICION
     // ==========================================================
@@ -253,19 +251,26 @@
 
         incidentMap.clear();
 
+        correlationMap.clear();
+
+
         Object.keys(categoryState)
             .forEach(key => {
+
                 categoryState[key] = false;
             });
 
+
         Object.keys(evidenceMap)
             .forEach(key => {
+
                 evidenceMap[key].clear();
             });
     }
 
+
     // ==========================================================
-    // ⭐ REAL ADSENSE RENDER
+    // ⭐ STRONG REAL ADSENSE RENDER DETECTION
     // ==========================================================
     function checkRealAdRender() {
 
@@ -276,27 +281,52 @@
 
         let rendered = false;
 
+
         ads.forEach(ad => {
 
-            const iframe =
-                ad.querySelector(
-                    "iframe"
-                );
-
-            if (!iframe) {
+            if (rendered) {
                 return;
             }
 
-            const rect =
-                iframe.getBoundingClientRect();
 
-            if (
-                rect.width > 0 &&
-                rect.height > 0
-            ) {
-                rendered = true;
-            }
+            const frames =
+                ad.querySelectorAll(
+                    "iframe"
+                );
+
+
+            frames.forEach(iframe => {
+
+                if (rendered) {
+                    return;
+                }
+
+
+                const rect =
+                    iframe.getBoundingClientRect();
+
+                const style =
+                    window.getComputedStyle(
+                        iframe
+                    );
+
+
+                const visible =
+                    rect.width > 0 &&
+                    rect.height > 0 &&
+                    style.display !== "none" &&
+                    style.visibility !== "hidden" &&
+                    style.opacity !== "0";
+
+
+                if (visible) {
+
+                    rendered = true;
+                }
+            });
+
         });
+
 
         if (rendered) {
 
@@ -315,8 +345,10 @@
             unlockPage();
         }
 
+
         return rendered;
     }
+
 
     // ==========================================================
     // 🔓 UNLOCK PAGE
@@ -332,13 +364,7 @@
             overlay.remove();
         }
 
-        /*
-         * IMPORTANT:
-         *
-         * Remove the actual lock stylesheet.
-         * Otherwise overflow:hidden !important
-         * can continue blocking page scrolling.
-         */
+
         const lockStyle =
             document.getElementById(
                 "ag-lock-style"
@@ -348,67 +374,74 @@
             lockStyle.remove();
         }
 
+
         pageLocked = false;
+
 
         if (document.documentElement) {
 
             document.documentElement.style
-                .removeProperty(
-                    "overflow"
-                );
+                .removeProperty("overflow");
 
             document.documentElement.style
-                .removeProperty(
-                    "height"
-                );
+                .removeProperty("height");
 
             document.documentElement.style
-                .removeProperty(
-                    "user-select"
-                );
+                .removeProperty("user-select");
         }
+
 
         if (document.body) {
 
             document.body.style
-                .removeProperty(
-                    "overflow"
-                );
+                .removeProperty("overflow");
 
             document.body.style
-                .removeProperty(
-                    "height"
-                );
+                .removeProperty("height");
 
             document.body.style
-                .removeProperty(
-                    "user-select"
-                );
+                .removeProperty("user-select");
         }
     }
+
 
     // ==========================================================
     // 🔒 LOCK PAGE
     // ==========================================================
     function lockPage() {
 
+        /*
+         * FINAL SAFETY GATE
+         *
+         * Never lock if a real visible ad
+         * exists at this exact moment.
+         */
+        if (checkRealAdRender()) {
+            return;
+        }
+
+
         if (pageLocked) {
             return;
         }
 
+
         if (legitAdRendered) {
             return;
         }
+
 
         pageLocked = true;
 
         blockerState =
             "CONFIRMED";
 
+
         const mainContent =
             document.querySelector(
                 "article, .post-body, .entry-content, main, #main-content"
             );
+
 
         if (mainContent) {
 
@@ -430,6 +463,7 @@
             `;
         }
 
+
         if (
             document.getElementById(
                 "ag-lock-overlay"
@@ -438,6 +472,7 @@
             return;
         }
 
+
         // ------------------------------------------------------
         // LOCK STYLE
         // ------------------------------------------------------
@@ -445,6 +480,7 @@
             document.getElementById(
                 "ag-lock-style"
             );
+
 
         if (!style) {
 
@@ -455,6 +491,7 @@
 
             style.id =
                 "ag-lock-style";
+
 
             style.textContent = `
                 html,
@@ -549,10 +586,12 @@
                 }
             `;
 
+
             document.head.appendChild(
                 style
             );
         }
+
 
         // ------------------------------------------------------
         // OVERLAY
@@ -562,8 +601,10 @@
                 "div"
             );
 
+
         overlay.id =
             "ag-lock-overlay";
+
 
         const logo =
             CONFIG.logoUrl
@@ -576,6 +617,7 @@
                     >
                   `
                 : "";
+
 
         overlay.innerHTML = `
             <div class="ag-card">
@@ -593,6 +635,7 @@
             </div>
         `;
 
+
         (
             document.body ||
             document.documentElement
@@ -600,6 +643,7 @@
             overlay
         );
     }
+
 
     // ==========================================================
     // 🧠 FINAL DECISION ENGINE
@@ -610,6 +654,7 @@
             return;
         }
 
+
         if (
             document.readyState ===
             "loading"
@@ -617,8 +662,9 @@
             return;
         }
 
+
         /*
-         * Real advertisement always wins.
+         * REAL AD ALWAYS WINS
          */
         if (
             checkRealAdRender()
@@ -626,54 +672,53 @@
             return;
         }
 
+
         if (!nowReady()) {
             return;
         }
+
 
         const categories =
             Object.values(
                 categoryState
             ).filter(Boolean).length;
 
+
         const network =
             evidenceMap.NETWORK.size;
+
 
         const cosmetic =
             evidenceMap.DOM_COSMETIC.size;
 
+
         const browserEvidence =
             evidenceMap.BROWSER_ENGINE.size;
+
 
         const resource =
             evidenceMap.RESOURCE.size;
 
+
         const removal =
             evidenceMap.REMOVAL.size;
 
-        /*
-         * PRIMARY CORRELATION
-         */
+
         const networkDom =
             network > 0 &&
             cosmetic > 0;
 
-        /*
-         * NETWORK + REMOVAL
-         */
+
         const removalNetwork =
             network > 0 &&
             removal > 0;
 
-        /*
-         * RESOURCE + DOM
-         */
+
         const resourceDom =
             resource > 0 &&
             cosmetic > 0;
 
-        /*
-         * STRONG MULTI-SIGNAL
-         */
+
         const multiSignal =
             network > 0 &&
             cosmetic > 0 &&
@@ -683,12 +728,9 @@
                 browserEvidence > 0
             );
 
+
         /*
-         * Final lock requires:
-         *
-         * 1. High score
-         * 2. At least two independent categories
-         * 3. A meaningful correlation
+         * FINAL LOCK
          */
         if (
             detectionScore >=
@@ -704,12 +746,25 @@
             )
         ) {
 
+            /*
+             * One last real-ad check immediately
+             * before locking.
+             */
+            if (
+                checkRealAdRender()
+            ) {
+                return;
+            }
+
+
             blockerState =
                 "CONFIRMED";
+
 
             lockPage();
         }
     }
+
 
     // ==========================================================
     // 🎯 INCIDENT REGISTRATION
@@ -725,12 +780,20 @@
             return;
         }
 
+
+        /*
+         * Never accumulate blocker evidence
+         * after a legitimate ad is known.
+         */
+        if (legitAdRendered) {
+            return;
+        }
+
+
         const now =
             performance.now();
 
-        /*
-         * Deduplicate repeated signals.
-         */
+
         if (
             incidentMap.has(id) &&
             now -
@@ -740,21 +803,26 @@
             return;
         }
 
+
         incidentMap.set(
             id,
             now
         );
 
+
         const weight =
             WEIGHTS[confidence] ||
             WEIGHTS.WEAK;
 
+
         detectionScore +=
             weight;
+
 
         categoryState[
             category
         ] = true;
+
 
         if (
             evidenceMap[category]
@@ -767,42 +835,71 @@
             );
         }
 
-        /*
-         * NETWORK + DOM
-         */
+
+        // ------------------------------------------------------
+        // CORRELATION BONUSES
+        // ------------------------------------------------------
+
         if (
             evidenceMap.NETWORK.size > 0 &&
             evidenceMap.DOM_COSMETIC.size > 0
         ) {
 
-            detectionScore += 25;
+            if (
+                !correlationMap.has(
+                    "network-dom"
+                )
+            ) {
+
+                correlationMap.add(
+                    "network-dom"
+                );
+
+                detectionScore += 25;
+            }
         }
 
-        /*
-         * NETWORK + REMOVAL
-         */
+
         if (
             evidenceMap.NETWORK.size > 0 &&
             evidenceMap.REMOVAL.size > 0
         ) {
 
-            detectionScore += 25;
+            if (
+                !correlationMap.has(
+                    "network-removal"
+                )
+            ) {
+
+                correlationMap.add(
+                    "network-removal"
+                );
+
+                detectionScore += 25;
+            }
         }
 
-        /*
-         * RESOURCE + DOM
-         */
+
         if (
             evidenceMap.RESOURCE.size > 0 &&
             evidenceMap.DOM_COSMETIC.size > 0
         ) {
 
-            detectionScore += 20;
+            if (
+                !correlationMap.has(
+                    "resource-dom"
+                )
+            ) {
+
+                correlationMap.add(
+                    "resource-dom"
+                );
+
+                detectionScore += 20;
+            }
         }
 
-        /*
-         * Full four-signal correlation.
-         */
+
         if (
             evidenceMap.NETWORK.size > 0 &&
             evidenceMap.DOM_COSMETIC.size > 0 &&
@@ -810,14 +907,27 @@
             evidenceMap.REMOVAL.size > 0
         ) {
 
-            detectionScore += 30;
+            if (
+                !correlationMap.has(
+                    "full-correlation"
+                )
+            ) {
+
+                correlationMap.add(
+                    "full-correlation"
+                );
+
+                detectionScore += 30;
+            }
         }
+
 
         setTimeout(
             evaluate,
             300
         );
     }
+
 
     // ==========================================================
     // 🌐 NETWORK INCIDENT
@@ -830,6 +940,7 @@
             return;
         }
 
+
         registerIncident(
             "network:" + source,
             "MEDIUM",
@@ -837,6 +948,7 @@
             source
         );
     }
+
 
     // ==========================================================
     // 🪤 MULTI BAIT SYSTEM
@@ -868,8 +980,8 @@
                 classes:
                     "ad-container ad-placement ad-slot"
             }
-
         ];
+
 
         baitConfigs.forEach(
             config => {
@@ -882,28 +994,49 @@
                     return;
                 }
 
+
                 const bait =
                     document.createElement(
                         "div"
                     );
 
+
                 bait.id =
                     config.id;
+
 
                 bait.dataset.agBait =
                     "true";
 
+
                 bait.className =
                     config.classes;
 
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * The bait itself is NOT hidden by
+                 * display:none / visibility:hidden.
+                 *
+                 * It is simply positioned outside
+                 * the viewport.
+                 *
+                 * This prevents the detector from
+                 * interpreting its own hidden state
+                 * as blocker evidence.
+                 */
                 bait.style.cssText =
+                    "display:block!important;" +
+                    "visibility:visible!important;" +
                     "width:1px!important;" +
                     "height:1px!important;" +
                     "position:absolute!important;" +
                     "left:-9999px!important;" +
                     "top:-9999px!important;" +
-                    "opacity:0.01!important;" +
+                    "opacity:1!important;" +
                     "pointer-events:none!important;";
+
 
                 (
                     document.body ||
@@ -915,12 +1048,14 @@
         );
     }
 
+
     // ==========================================================
     // 🎨 ADVANCED COSMETIC DETECTION
     // ==========================================================
     function checkCosmetic() {
 
         createBaits();
+
 
         const targets =
             document.querySelectorAll(
@@ -929,14 +1064,13 @@
                 ".adsbygoogle"
             );
 
+
         targets.forEach(
             element => {
 
-                /*
-                 * ----------------------------------------------
-                 * BAIT CHECK
-                 * ----------------------------------------------
-                 */
+                // ------------------------------------------------
+                // BAIT CHECK
+                // ------------------------------------------------
                 if (
                     element.dataset.agBait ===
                     "true"
@@ -947,19 +1081,24 @@
                             element
                         );
 
-                    const suspicious =
-                        style.display ===
-                            "none" ||
-                        style.visibility ===
-                            "hidden" ||
-                        style.opacity ===
-                            "0" ||
-                        element.offsetHeight ===
-                            0;
 
-                    if (
-                        suspicious
-                    ) {
+                    /*
+                     * The bait should naturally remain:
+                     *
+                     * display:block
+                     * visibility:visible
+                     * height:1px
+                     *
+                     * Its off-screen position is intentional
+                     * and therefore NOT considered suspicious.
+                     */
+                    const suspicious =
+                        style.display === "none" ||
+                        style.visibility === "hidden" ||
+                        element.offsetHeight === 0;
+
+
+                    if (suspicious) {
 
                         const hits =
                             parseInt(
@@ -968,8 +1107,10 @@
                                 10
                             ) + 1;
 
+
                         element.dataset.hits =
                             String(hits);
+
 
                         if (
                             hits >= 2
@@ -990,37 +1131,54 @@
                             "0";
                     }
 
+
                     return;
                 }
 
-                /*
-                 * ----------------------------------------------
-                 * REAL AD SLOT CHECK
-                 * ----------------------------------------------
-                 */
+
+                // ------------------------------------------------
+                // REAL AD SLOT
+                // ------------------------------------------------
                 if (
                     element.matches(
                         "ins.adsbygoogle, .adsbygoogle"
                     )
                 ) {
 
-                    const iframe =
+                    /*
+                     * A real visible ad immediately wins.
+                     */
+                    if (
                         element.querySelector(
                             "iframe"
-                        );
+                        )
+                    ) {
 
-                    if (iframe) {
+                        const frames =
+                            element.querySelectorAll(
+                                "iframe"
+                            );
 
-                        const rect =
-                            iframe.getBoundingClientRect();
 
-                        if (
-                            rect.width > 0 &&
-                            rect.height > 0
+                        for (
+                            const iframe
+                            of frames
                         ) {
-                            return;
+
+                            const rect =
+                                iframe.getBoundingClientRect();
+
+
+                            if (
+                                rect.width > 0 &&
+                                rect.height > 0
+                            ) {
+
+                                return;
+                            }
                         }
                     }
+
 
                     /*
                      * Unfilled is neutral.
@@ -1033,18 +1191,18 @@
                         return;
                     }
 
+
                     const style =
                         window.getComputedStyle(
                             element
                         );
 
+
                     const hidden =
-                        style.display ===
-                            "none" ||
-                        style.visibility ===
-                            "hidden" ||
-                        element.offsetHeight ===
-                            0;
+                        style.display === "none" ||
+                        style.visibility === "hidden" ||
+                        element.offsetHeight === 0;
+
 
                     if (hidden) {
 
@@ -1055,8 +1213,10 @@
                                 10
                             ) + 1;
 
+
                         element.dataset.hits =
                             String(hits);
+
 
                         if (
                             hits >= 3
@@ -1064,7 +1224,10 @@
 
                             registerIncident(
                                 "cosmetic:ad:" +
-                                    element.id,
+                                    (
+                                        element.id ||
+                                        "slot"
+                                    ),
                                 "STRONG",
                                 "DOM_COSMETIC",
                                 "hidden_ad"
@@ -1081,6 +1244,7 @@
         );
     }
 
+
     // ==========================================================
     // 🧬 BROWSER SIGNALS
     // ==========================================================
@@ -1088,14 +1252,13 @@
 
         let score = 0;
 
-        /*
-         * Soul
-         */
+
         if (
             browser.soul
         ) {
             score += 30;
         }
+
 
         if (
             window.soul ||
@@ -1109,26 +1272,23 @@
             score += 40;
         }
 
-        /*
-         * Brave remains supporting evidence.
-         */
+
         if (
             browser.brave
         ) {
             score += 10;
         }
 
-        /*
-         * Opera remains supporting evidence.
-         */
+
         if (
             browser.opera
         ) {
             score += 5;
         }
 
+
         /*
-         * Browser evidence NEVER locks by itself.
+         * Browser evidence is ONLY supporting evidence.
          */
         if (
             score >= 60
@@ -1154,6 +1314,7 @@
         }
     }
 
+
     // ==========================================================
     // 📦 AD STATE INSPECTION
     // ==========================================================
@@ -1164,55 +1325,72 @@
                 "ins.adsbygoogle, .adsbygoogle"
             );
 
+
         let visibleAds = 0;
 
         let usableAdSlot = false;
 
+
         ads.forEach(
             ad => {
 
-                const iframe =
-                    ad.querySelector(
+                const frames =
+                    ad.querySelectorAll(
                         "iframe"
                     );
 
-                if (iframe) {
 
-                    const rect =
-                        iframe.getBoundingClientRect();
+                frames.forEach(
+                    iframe => {
 
-                    if (
-                        rect.width > 0 &&
-                        rect.height > 0
-                    ) {
+                        const rect =
+                            iframe.getBoundingClientRect();
 
-                        visibleAds++;
 
-                        usableAdSlot = true;
+                        const style =
+                            window.getComputedStyle(
+                                iframe
+                            );
 
-                        legitAdRendered =
-                            true;
 
-                        lastAdRenderTime =
-                            performance.now();
+                        if (
+                            rect.width > 0 &&
+                            rect.height > 0 &&
+                            style.display !== "none" &&
+                            style.visibility !== "hidden" &&
+                            style.opacity !== "0"
+                        ) {
 
-                        missingAdChecks = 0;
+                            visibleAds++;
+
+                            usableAdSlot = true;
+
+                            legitAdRendered =
+                                true;
+
+                            lastAdRenderTime =
+                                performance.now();
+
+                            missingAdChecks = 0;
+                        }
                     }
-                }
+                );
+
 
                 if (
                     ad.getAttribute(
                         "data-ad-status"
                     ) !== "unfilled"
                 ) {
+
                     usableAdSlot = true;
                 }
             }
         );
 
+
         /*
-         * A currently visible real ad is
-         * always positive evidence.
+         * REAL VISIBLE AD
          */
         if (
             visibleAds > 0
@@ -1220,20 +1398,16 @@
 
             detectionScore = 0;
 
+            clearDetectionEvidence();
+
             unlockPage();
 
             return;
         }
 
+
         /*
-         * ------------------------------------------------------
          * RE-BLOCK VERIFICATION
-         * ------------------------------------------------------
-         *
-         * Do NOT immediately reset legitAdRendered just
-         * because an ad is temporarily missing.
-         *
-         * Require several consecutive checks.
          */
         if (
             legitAdRendered &&
@@ -1242,15 +1416,12 @@
 
             missingAdChecks++;
 
+
             if (
                 missingAdChecks >=
                 AD_MISSING_CONFIRMATIONS
             ) {
 
-                /*
-                 * Only now allow the detection engine
-                 * to become active again.
-                 */
                 legitAdRendered = false;
 
                 missingAdChecks = 0;
@@ -1263,6 +1434,7 @@
         }
     }
 
+
     // ==========================================================
     // 🚨 RESOURCE ERROR MONITOR
     // ==========================================================
@@ -1274,13 +1446,16 @@
                 return;
             }
 
+
             const target =
                 event.target;
+
 
             const src =
                 target?.src ||
                 target?.href ||
                 "";
+
 
             if (
                 /googlesyndication|pagead2|doubleclick|googleadservices/i
@@ -1294,6 +1469,7 @@
                     "resource_error"
                 );
 
+
                 networkIncident(
                     "resource"
                 );
@@ -1302,6 +1478,7 @@
         },
         true
     );
+
 
     // ==========================================================
     // ⚡ XHR INTERCEPTOR
@@ -1314,6 +1491,7 @@
         const originalSend =
             XMLHttpRequest.prototype.send;
 
+
         XMLHttpRequest.prototype.open =
             function (
                 method,
@@ -1321,16 +1499,17 @@
             ) {
 
                 this.__ag_url =
-                    typeof url ===
-                        "string"
+                    typeof url === "string"
                         ? url
                         : "";
+
 
                 return originalOpen.apply(
                     this,
                     arguments
                 );
             };
+
 
         XMLHttpRequest.prototype.send =
             function () {
@@ -1343,6 +1522,7 @@
                             this.__ag_url ||
                             "";
 
+
                         if (
                             /pagead2|googlesyndication|doubleclick|googleadservices/i
                                 .test(url)
@@ -1351,6 +1531,7 @@
                             networkIncident(
                                 "xhr"
                             );
+
 
                             registerIncident(
                                 "xhr:error:" + url,
@@ -1362,6 +1543,7 @@
                     }
                 );
 
+
                 return originalSend.apply(
                     this,
                     arguments
@@ -1369,6 +1551,7 @@
             };
 
     })();
+
 
     // ==========================================================
     // ⚡ FETCH INTERCEPTOR
@@ -1381,18 +1564,19 @@
             return;
         }
 
+
         const originalFetch =
             window.fetch;
+
 
         window.fetch =
             function (...args) {
 
                 const url =
-                    typeof args[0] ===
-                        "string"
+                    typeof args[0] === "string"
                         ? args[0]
-                        : args[0]?.url ||
-                          "";
+                        : args[0]?.url || "";
+
 
                 return originalFetch
                     .apply(
@@ -1413,6 +1597,7 @@
                                 );
                             }
 
+
                             return response;
                         }
                     )
@@ -1428,6 +1613,7 @@
                                     "fetch"
                                 );
 
+
                                 registerIncident(
                                     "fetch:error:" + url,
                                     "STRONG",
@@ -1436,12 +1622,14 @@
                                 );
                             }
 
+
                             throw error;
                         }
                     );
             };
 
     })();
+
 
     // ==========================================================
     // 🌐 NETWORK PIXEL TEST
@@ -1451,8 +1639,10 @@
         const pixel =
             new Image();
 
+
         pixel.onload =
             () => {};
+
 
         pixel.onerror =
             () => {
@@ -1462,10 +1652,12 @@
                 );
             };
 
+
         pixel.src =
             "https://pagead2.googlesyndication.com/pagead/img/0.gif?" +
             Date.now();
     }
+
 
     // ==========================================================
     // 🌐 NETWORK FETCH TEST
@@ -1493,6 +1685,7 @@
         }
     }
 
+
     // ==========================================================
     // 🗑️ REMOVAL TRACKING
     // ==========================================================
@@ -1506,6 +1699,7 @@
             return;
         }
 
+
         const isAd =
             node.classList?.contains(
                 "adsbygoogle"
@@ -1516,6 +1710,7 @@
             node.querySelector?.(
                 ".adsbygoogle, ins.adsbygoogle"
             );
+
 
         if (
             isAd
@@ -1535,6 +1730,7 @@
         }
     }
 
+
     // ==========================================================
     // 👀 ADVANCED DOM OBSERVER
     // ==========================================================
@@ -1547,18 +1743,13 @@
                     mutations.forEach(
                         mutation => {
 
-                            /*
-                             * Removed nodes
-                             */
                             mutation
                                 .removedNodes
                                 .forEach(
                                     inspectRemovedNode
                                 );
 
-                            /*
-                             * Added suspicious nodes
-                             */
+
                             mutation
                                 .addedNodes
                                 .forEach(
@@ -1566,10 +1757,11 @@
 
                                         if (
                                             node.nodeType !==
-                                                1
+                                            1
                                         ) {
                                             return;
                                         }
+
 
                                         const suspicious =
                                             node.matches?.(
@@ -1578,6 +1770,7 @@
                                             node.querySelector?.(
                                                 ".adsbygoogle, ins.adsbygoogle"
                                             );
+
 
                                         if (
                                             suspicious
@@ -1605,6 +1798,7 @@
                 }
             );
 
+
         observer.observe(
             document.documentElement,
             {
@@ -1621,6 +1815,7 @@
         );
 
     })();
+
 
     // ==========================================================
     // 🔍 MULTI-PASS VERIFICATION
@@ -1639,6 +1834,7 @@
                             return;
                         }
 
+
                         checkRealAdRender();
 
                         inspectAdState();
@@ -1656,6 +1852,7 @@
         );
     }
 
+
     // ==========================================================
     // 🛡️ FAST LOCAL WATCHDOG
     // ==========================================================
@@ -1667,8 +1864,9 @@
             return;
         }
 
+
         /*
-         * Real ad has priority.
+         * REAL AD FIRST
          */
         if (
             checkRealAdRender()
@@ -1676,7 +1874,9 @@
             return;
         }
 
+
         inspectAdState();
+
 
         if (
             legitAdRendered
@@ -1684,15 +1884,14 @@
             return;
         }
 
-        /*
-         * Continue even when page is locked.
-         */
+
         checkCosmetic();
 
         checkBrowserSignals();
 
         evaluate();
     }
+
 
     // ==========================================================
     // 🌐 NETWORK WATCHDOG
@@ -1705,12 +1904,25 @@
             return;
         }
 
+
+        /*
+         * If a real ad already exists,
+         * network testing is unnecessary.
+         */
+        if (
+            checkRealAdRender()
+        ) {
+            return;
+        }
+
+
         runPixelTest();
 
         await runFetchTest();
 
         evaluate();
     }
+
 
     // ==========================================================
     // 🔄 MAIN CHECK
@@ -1719,6 +1931,7 @@
 
         runLocalWatch();
     }
+
 
     // ==========================================================
     // 💓 INITIALIZATION
@@ -1732,17 +1945,13 @@
 
                 scheduleDelayedVerification();
 
-                /*
-                 * LOCAL MONITOR
-                 */
+
                 setInterval(
                     runLocalWatch,
                     LOCAL_WATCH_INTERVAL
                 );
 
-                /*
-                 * NETWORK MONITOR
-                 */
+
                 setInterval(
                     runNetworkWatch,
                     NETWORK_WATCH_INTERVAL
@@ -1752,6 +1961,7 @@
             50
         );
     }
+
 
     // ==========================================================
     // 🚀 START
