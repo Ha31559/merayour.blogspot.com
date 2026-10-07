@@ -11,7 +11,7 @@
     window.__MERAYOUR_ADGUARD_ACTIVE__ = true;
 
     // ==========================================================
-    // 🛑 BLOGGER PREVIEW BYPASS - REPAIRED
+    // 🛑 BLOGGER PREVIEW BYPASS - FINAL UPGRADED
     // ==========================================================
     function isBloggerPreview() {
 
@@ -39,22 +39,28 @@
             return true;
         }
 
+        // FINAL FIX: Blogger ke saare preview types
         if (
+            path.includes("/b/") ||
+            path.includes("/layout-preview") ||
+            path.includes("/template-preview") ||
+            path.includes("/widget-preview") ||
             path.includes("/b/post-preview") ||
             path.includes("/blog/post/edit/preview/") ||
             href.includes("bpreview") ||
             href.includes("preview=true") ||
             href.includes("ispreview") ||
+            href.includes("layout-preview") ||
+            search.includes("token=") ||
             search.includes("bpreview") ||
             search.includes("preview")
         ) {
             return true;
         }
 
-        // Blogger preview always in iframe
         if (
             window!== window.top &&
-            ref.includes("blogger.com")
+            (ref.includes("blogger.com") || ref.includes("blogspot.com"))
         ) {
             return true;
         }
@@ -116,14 +122,8 @@
     const pageLoadStart =
         performance.now();
 
-    // ----------------------------------------------------------
-    // Active incidents
-    // ----------------------------------------------------------
     const incidentMap = new Map();
 
-    // ----------------------------------------------------------
-    // Evidence is timestamped
-    // ----------------------------------------------------------
     const evidenceMap = {
 
         NETWORK: new Map(),
@@ -173,9 +173,6 @@
         performance.now() >= INITIAL_GRACE &&
         performance.now() - pageLoadStart >= ADSENSE_LOAD_GRACE;
 
-    // ==========================================================
-    // 🌐 BROWSER CLASSIFICATION
-    // ==========================================================
     const ua =
         (navigator.userAgent || "").toLowerCase();
 
@@ -186,11 +183,11 @@
 
         soul:
             ua.includes("soul") ||
-           !!window.soul ||
-           !!window.__soul_ext__,
+          !!window.soul ||
+          !!window.__soul_ext__,
 
         brave:
-           !!(
+          !!(
                 navigator.brave &&
                 typeof navigator.brave.isBrave ===
                     "function"
@@ -201,7 +198,7 @@
             ua.includes("opr/"),
 
         chrome:
-           !!window.chrome &&
+          !!window.chrome &&
             vendor.includes("google"),
 
         edge:
@@ -212,7 +209,7 @@
 
         safari:
             /safari/.test(ua) &&
-           !/chrome|crios|android/.test(ua)
+          !/chrome|crios|android/.test(ua)
     };
 
     const knownStandardBrowser =
@@ -221,9 +218,6 @@
         browser.firefox ||
         browser.safari;
 
-    // ==========================================================
-    // 🎚️ INTELLIGENT THRESHOLD - REPAIRED
-    // ==========================================================
     function getThreshold() {
 
         if (
@@ -235,18 +229,15 @@
                 lastAdRenderTime <
                 REBLOCK_GRACE
             )
-               ? 135
+              ? 135
                 : 110;
         }
 
         return knownStandardBrowser
-           ? 125
+          ? 125
             : 110;
     }
 
-    // ==========================================================
-    // 🧹 PRUNE OLD EVIDENCE
-    // ==========================================================
     function pruneEvidence() {
 
         const now =
@@ -266,7 +257,7 @@
         );
 
         Object.keys(evidenceMap)
-           .forEach(category => {
+          .forEach(category => {
 
                 const map =
                     evidenceMap[category];
@@ -286,9 +277,6 @@
             });
     }
 
-    // ==========================================================
-    // 🧮 ACTIVE SCORE
-    // ==========================================================
     function calculateScore() {
 
         pruneEvidence();
@@ -320,10 +308,6 @@
 
         const removal =
             evidenceMap.REMOVAL.size > 0;
-
-        // ------------------------------------------------------
-        // Correlation bonuses
-        // ------------------------------------------------------
 
         if (
             network &&
@@ -362,23 +346,17 @@
         return score;
     }
 
-    // ==========================================================
-    // 🧹 CLEAR SUSPICION
-    // ==========================================================
     function clearDetectionEvidence() {
 
         incidentMap.clear();
 
         Object.keys(evidenceMap)
-           .forEach(category => {
+          .forEach(category => {
 
                 evidenceMap[category].clear();
             });
     }
 
-    // ==========================================================
-    // ⭐ STRONG REAL ADSENSE RENDER DETECTION
-    // ==========================================================
     function checkRealAdRender() {
 
         const ads =
@@ -446,9 +424,6 @@
         return rendered;
     }
 
-    // ==========================================================
-    // 🔓 UNLOCK PAGE
-    // ==========================================================
     function unlockPage() {
 
         const overlay =
@@ -474,31 +449,28 @@
         if (document.documentElement) {
 
             document.documentElement.style
-               .removeProperty("overflow");
+              .removeProperty("overflow");
 
             document.documentElement.style
-               .removeProperty("height");
+              .removeProperty("height");
 
             document.documentElement.style
-               .removeProperty("user-select");
+              .removeProperty("user-select");
         }
 
         if (document.body) {
 
             document.body.style
-               .removeProperty("overflow");
+              .removeProperty("overflow");
 
             document.body.style
-               .removeProperty("height");
+              .removeProperty("height");
 
             document.body.style
-               .removeProperty("user-select");
+              .removeProperty("user-select");
         }
     }
 
-    // ==========================================================
-    // 🔒 LOCK PAGE - REPAIRED
-    // ==========================================================
     function lockPage() {
 
         if (
@@ -600,7 +572,7 @@
                     font-family: system-ui, sans-serif;
                     text-align: center;
                 }
-               .ag-card {
+              .ag-card {
                     width: 100%;
                     max-width: 400px;
                     padding: 32px 24px;
@@ -609,7 +581,7 @@
                     border-radius: 12px;
                     box-shadow: 0 10px 25px rgba(0,0,0,.5);
                 }
-               .ag-logo {
+              .ag-logo {
                     max-width: 80px;
                     max-height: 80px;
                     margin-bottom: 16px;
@@ -645,7 +617,7 @@
 
         const logo =
             CONFIG.logoUrl
-               ? `
+              ? `
                     <img
                         src="${CONFIG.logoUrl}"
                         alt="Merayour"
@@ -675,9 +647,6 @@
         );
     }
 
-    // ==========================================================
-    // 🧠 FINAL DECISION ENGINE - REPAIRED
-    // ==========================================================
     function evaluate() {
 
         if (!navigator.onLine) {
@@ -757,7 +726,6 @@
                 browserEvidence
             );
 
-        // REPAIRED: Sirf cosmetic >=2 se lock nahi hoga, network compulsory
         const strongCombination =
             (networkDom ||
             networkResource ||
@@ -790,9 +758,6 @@
         }
     }
 
-    // ==========================================================
-    // 🎯 INCIDENT REGISTRATION
-    // ==========================================================
     function registerIncident(
         id,
         confidence,
@@ -884,9 +849,6 @@
         );
     }
 
-    // ==========================================================
-    // 🌐 NETWORK INCIDENT - REPAIRED
-    // ==========================================================
     function networkIncident(
         source,
         confidence = "MEDIUM"
@@ -911,9 +873,6 @@
         );
     }
 
-    // ==========================================================
-    // 🪤 MULTI BAIT SYSTEM - REPAIRED
-    // ==========================================================
     function createBaits() {
 
         if (!document.body) {
@@ -993,14 +952,10 @@
         );
     }
 
-    // ==========================================================
-    // 🎨 ADVANCED COSMETIC DETECTION - REPAIRED
-    // ==========================================================
     function checkCosmetic() {
 
         createBaits();
 
-        // REPAIRED: AdSense script load hone tak check skip
         const isAdScriptLoading =
             typeof window.adsbygoogle === 'undefined';
 
@@ -1032,7 +987,6 @@
                             element
                         );
 
-                    // REPAIRED: offsetHeight === 0 hatao, sirf display:none
                     const suspicious =
                         style.display === "none" ||
                         style.visibility === "hidden";
@@ -1114,7 +1068,6 @@
                         return;
                     }
 
-                    // REPAIRED: Empty slot neutral
                     if (
                         element.innerHTML.trim() === ""
                     ) {
@@ -1126,7 +1079,6 @@
                             element
                         );
 
-                    // REPAIRED: offsetHeight check hatao
                     const hidden =
                         style.display === "none" ||
                         style.visibility === "hidden";
@@ -1169,9 +1121,6 @@
         );
     }
 
-    // ==========================================================
-    // 🧬 BROWSER SIGNALS
-    // ==========================================================
     function checkBrowserSignals() {
 
         const now =
@@ -1243,9 +1192,6 @@
         }
     }
 
-    // ==========================================================
-    // 📦 AD STATE INSPECTION
-    // ==========================================================
     function inspectAdState() {
 
         const ads =
@@ -1330,9 +1276,6 @@
         }
     }
 
-    // ==========================================================
-    // 🚨 RESOURCE ERROR MONITOR
-    // ==========================================================
     window.addEventListener(
         "error",
         function (event) {
@@ -1351,7 +1294,7 @@
 
             if (
                 /googlesyndication|pagead2|doubleclick|googleadservices/i
-                   .test(src)
+                  .test(src)
             ) {
 
                 registerIncident(
@@ -1371,9 +1314,6 @@
         true
     );
 
-    // ==========================================================
-    // ⚡ XHR INTERCEPTOR
-    // ==========================================================
     (function installXHR() {
 
         const originalOpen =
@@ -1390,7 +1330,7 @@
 
                 this.__ag_url =
                     typeof url === "string"
-                       ? url
+                      ? url
                         : "";
 
                 return originalOpen.apply(
@@ -1412,7 +1352,7 @@
 
                         if (
                             /pagead2|googlesyndication|doubleclick|googleadservices/i
-                               .test(url)
+                              .test(url)
                         ) {
 
                             networkIncident(
@@ -1438,13 +1378,10 @@
 
     })();
 
-    // ==========================================================
-    // ⚡ FETCH INTERCEPTOR
-    // ==========================================================
     (function installFetchInterceptor() {
 
         if (
-           !window.fetch
+          !window.fetch
         ) {
             return;
         }
@@ -1457,21 +1394,21 @@
 
                 const url =
                     typeof args[0] === "string"
-                       ? args[0]
+                      ? args[0]
                         : args[0]?.url || "";
 
                 return originalFetch
-                   .apply(
+                  .apply(
                         this,
                         args
                     )
-                   .then(
+                  .then(
                         response => {
 
                             if (
-                               !response.ok &&
+                              !response.ok &&
                                 /pagead2|googlesyndication|doubleclick|googleadservices/i
-                                   .test(url)
+                                  .test(url)
                             ) {
 
                                 networkIncident(
@@ -1483,12 +1420,12 @@
                             return response;
                         }
                     )
-                   .catch(
+                  .catch(
                         error => {
 
                             if (
                                 /pagead2|googlesyndication|doubleclick|googleadservices/i
-                                   .test(url)
+                                  .test(url)
                             ) {
 
                                 networkIncident(
@@ -1511,9 +1448,6 @@
 
     })();
 
-    // ==========================================================
-    // 🌐 NETWORK PIXEL TEST
-    // ==========================================================
     function runPixelTest() {
 
         const pixel =
@@ -1536,9 +1470,6 @@
             Date.now();
     }
 
-    // ==========================================================
-    // 🌐 NETWORK FETCH TEST
-    // ==========================================================
     async function runFetchTest() {
 
         try {
@@ -1563,9 +1494,6 @@
         }
     }
 
-    // ==========================================================
-    // 🗑️ REMOVAL TRACKING
-    // ==========================================================
     function inspectRemovedNode(
         node
     ) {
@@ -1605,9 +1533,6 @@
         }
     }
 
-    // ==========================================================
-    // 👀 ADVANCED DOM OBSERVER
-    // ==========================================================
     (function installDOMObserver() {
 
         const observer =
@@ -1618,14 +1543,14 @@
                         mutation => {
 
                             mutation
-                               .removedNodes
-                               .forEach(
+                              .removedNodes
+                              .forEach(
                                     inspectRemovedNode
                                 );
 
                             mutation
-                               .addedNodes
-                               .forEach(
+                              .addedNodes
+                              .forEach(
                                     node => {
 
                                         if (
@@ -1714,9 +1639,6 @@
 
     })();
 
-    // ==========================================================
-    // 🔍 MULTI-PASS VERIFICATION
-    // ==========================================================
     function scheduleDelayedVerification() {
 
         delayedChecks.forEach(
@@ -1726,7 +1648,7 @@
                     async () => {
 
                         if (
-                           !navigator.onLine
+                          !navigator.onLine
                         ) {
                             return;
                         }
@@ -1744,13 +1666,10 @@
         );
     }
 
-    // ==========================================================
-    // 🛡️ FAST LOCAL WATCHDOG
-    // ==========================================================
     function runLocalWatch() {
 
         if (
-           !navigator.onLine
+          !navigator.onLine
         ) {
             return;
         }
@@ -1777,13 +1696,10 @@
         evaluate();
     }
 
-    // ==========================================================
-    // 🌐 NETWORK WATCHDOG
-    // ==========================================================
     async function runNetworkWatch() {
 
         if (
-           !navigator.onLine
+          !navigator.onLine
         ) {
             return;
         }
@@ -1808,17 +1724,11 @@
         evaluate();
     }
 
-    // ==========================================================
-    // 🔄 MAIN CHECK
-    // ==========================================================
     function runAllChecks() {
 
         runLocalWatch();
     }
 
-    // ==========================================================
-    // 💓 INITIALIZATION - REPAIRED
-    // ==========================================================
     function init() {
 
         setTimeout(
@@ -1842,9 +1752,6 @@
         );
     }
 
-    // ==========================================================
-    // 🚀 START
-    // ==========================================================
     if (
         document.readyState ===
         "loading"
