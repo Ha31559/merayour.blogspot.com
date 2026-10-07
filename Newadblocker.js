@@ -2,6 +2,16 @@
     "use strict";
 
     // ==========================================================
+    // 🛑 DUPLICATE SCRIPT GUARD
+    // ==========================================================
+    if (window.__MERAYOUR_ADGUARD_ACTIVE__) {
+        return;
+    }
+
+    window.__MERAYOUR_ADGUARD_ACTIVE__ = true;
+
+
+    // ==========================================================
     // 🛑 BLOGGER PREVIEW BYPASS
     // ==========================================================
     function isBloggerPreview() {
@@ -57,9 +67,13 @@
     // 🧠 DETECTION WEIGHTS
     // ==========================================================
     const WEIGHTS = {
+
         CRITICAL: 70,
+
         STRONG: 40,
+
         MEDIUM: 30,
+
         WEAK: 10
     };
 
@@ -67,8 +81,6 @@
     // ==========================================================
     // 🎯 ENGINE STATE
     // ==========================================================
-    let detectionScore = 0;
-
     let legitAdRendered = false;
 
     let pageLocked = false;
@@ -79,59 +91,61 @@
 
     let missingAdChecks = 0;
 
+    let lastBrowserCheck = 0;
+
+
+    // ----------------------------------------------------------
+    // Active incidents
+    // ----------------------------------------------------------
     const incidentMap = new Map();
 
-    const correlationMap = new Set();
 
-
+    // ----------------------------------------------------------
+    // Evidence is timestamped
+    // ----------------------------------------------------------
     const evidenceMap = {
 
-        NETWORK: new Set(),
+        NETWORK: new Map(),
 
-        DOM_COSMETIC: new Set(),
+        DOM_COSMETIC: new Map(),
 
-        BROWSER_ENGINE: new Set(),
+        BROWSER_ENGINE: new Map(),
 
-        RESOURCE: new Set(),
+        RESOURCE: new Map(),
 
-        REMOVAL: new Set()
-    };
-
-
-    const categoryState = {
-
-        NETWORK: false,
-
-        DOM_COSMETIC: false,
-
-        BROWSER_ENGINE: false,
-
-        RESOURCE: false,
-
-        REMOVAL: false
+        REMOVAL: new Map()
     };
 
 
     // ==========================================================
     // ⏱️ TIMING
     // ==========================================================
-    const INITIAL_GRACE = 800;
+    const INITIAL_GRACE = 2500;
 
-    const INCIDENT_TTL = 2500;
+    const INCIDENT_TTL = 4000;
 
-    const INCIDENT_COOLDOWN = 1200;
+    const EVIDENCE_TTL = 4000;
 
-    const LOCAL_WATCH_INTERVAL = 500;
+    const INCIDENT_COOLDOWN = 1500;
 
-    const NETWORK_WATCH_INTERVAL = 4000;
+    const LOCAL_WATCH_INTERVAL = 700;
 
-    const AD_MISSING_CONFIRMATIONS = 4;
+    const NETWORK_WATCH_INTERVAL = 5000;
+
+    const AD_MISSING_CONFIRMATIONS = 6;
+
+    const REBLOCK_GRACE = 5000;
+
 
     const delayedChecks = [
-        800,
-        1500,
-        3000,
-        5000
+
+        2500,
+
+        4000,
+
+        6500,
+
+        9000
     ];
 
 
@@ -195,32 +209,40 @@
     // ==========================================================
     function getThreshold() {
 
-        let threshold =
-            knownStandardBrowser
-                ? 85
-                : 90;
+        if (
+            legitAdRendered
+        ) {
 
-        if (legitAdRendered) {
-            threshold = 160;
+            return (
+                performance.now() -
+                lastAdRenderTime <
+                REBLOCK_GRACE
+            )
+                ? 135
+                : 110;
         }
 
-        return threshold;
+
+        return knownStandardBrowser
+            ? 105
+            : 100;
     }
 
 
     // ==========================================================
-    // 🧹 EVIDENCE DECAY
+    // 🧹 PRUNE OLD EVIDENCE
     // ==========================================================
-    setInterval(() => {
+    function pruneEvidence() {
 
         const now =
             performance.now();
 
+
         incidentMap.forEach(
-            (timestamp, id) => {
+            (entry, id) => {
 
                 if (
-                    now - timestamp >
+                    now - entry.timestamp >
                     INCIDENT_TTL
                 ) {
 
@@ -230,16 +252,112 @@
         );
 
 
-        if (detectionScore > 0) {
+        Object.keys(evidenceMap)
+            .forEach(category => {
 
-            detectionScore =
-                Math.max(
-                    0,
-                    detectionScore - 5
+                const map =
+                    evidenceMap[category];
+
+
+                map.forEach(
+                    (timestamp, source) => {
+
+                        if (
+                            now - timestamp >
+                            EVIDENCE_TTL
+                        ) {
+
+                            map.delete(source);
+                        }
+                    }
                 );
+            });
+    }
+
+
+    // ==========================================================
+    // 🧮 ACTIVE SCORE
+    // ==========================================================
+    function calculateScore() {
+
+        pruneEvidence();
+
+
+        let score = 0;
+
+
+        incidentMap.forEach(
+            entry => {
+
+                if (
+                    performance.now() -
+                        entry.timestamp <=
+                    INCIDENT_TTL
+                ) {
+
+                    score += entry.weight;
+                }
+            }
+        );
+
+
+        const network =
+            evidenceMap.NETWORK.size > 0;
+
+        const cosmetic =
+            evidenceMap.DOM_COSMETIC.size > 0;
+
+        const resource =
+            evidenceMap.RESOURCE.size > 0;
+
+        const removal =
+            evidenceMap.REMOVAL.size > 0;
+
+
+        // ------------------------------------------------------
+        // Correlation bonuses
+        // ------------------------------------------------------
+
+        if (
+            network &&
+            cosmetic
+        ) {
+
+            score += 25;
         }
 
-    }, 1000);
+
+        if (
+            network &&
+            removal
+        ) {
+
+            score += 25;
+        }
+
+
+        if (
+            resource &&
+            cosmetic
+        ) {
+
+            score += 20;
+        }
+
+
+        if (
+            network &&
+            cosmetic &&
+            resource &&
+            removal
+        ) {
+
+            score += 30;
+        }
+
+
+        return score;
+    }
 
 
     // ==========================================================
@@ -247,24 +365,13 @@
     // ==========================================================
     function clearDetectionEvidence() {
 
-        detectionScore = 0;
-
         incidentMap.clear();
-
-        correlationMap.clear();
-
-
-        Object.keys(categoryState)
-            .forEach(key => {
-
-                categoryState[key] = false;
-            });
 
 
         Object.keys(evidenceMap)
-            .forEach(key => {
+            .forEach(category => {
 
-                evidenceMap[key].clear();
+                evidenceMap[category].clear();
             });
     }
 
@@ -279,6 +386,7 @@
                 "ins.adsbygoogle, .adsbygoogle"
             );
 
+
         let rendered = false;
 
 
@@ -290,9 +398,7 @@
 
 
             const frames =
-                ad.querySelectorAll(
-                    "iframe"
-                );
+                ad.querySelectorAll("iframe");
 
 
             frames.forEach(iframe => {
@@ -360,6 +466,7 @@
                 "ag-lock-overlay"
             );
 
+
         if (overlay) {
             overlay.remove();
         }
@@ -369,6 +476,7 @@
             document.getElementById(
                 "ag-lock-style"
             );
+
 
         if (lockStyle) {
             lockStyle.remove();
@@ -416,7 +524,9 @@
          * Never lock if a real visible ad
          * exists at this exact moment.
          */
-        if (checkRealAdRender()) {
+        if (
+            checkRealAdRender()
+        ) {
             return;
         }
 
@@ -437,6 +547,9 @@
             "CONFIRMED";
 
 
+        // ------------------------------------------------------
+        // DESTROY ARTICLE CONTENT
+        // ------------------------------------------------------
         const mainContent =
             document.querySelector(
                 "article, .post-body, .entry-content, main, #main-content"
@@ -488,6 +601,7 @@
                 document.createElement(
                     "style"
                 );
+
 
             style.id =
                 "ag-lock-style";
@@ -678,72 +792,109 @@
         }
 
 
-        const categories =
-            Object.values(
-                categoryState
-            ).filter(Boolean).length;
+        pruneEvidence();
+
+
+        const detectionScore =
+            calculateScore();
 
 
         const network =
-            evidenceMap.NETWORK.size;
+            evidenceMap.NETWORK.size > 0;
 
 
         const cosmetic =
-            evidenceMap.DOM_COSMETIC.size;
+            evidenceMap.DOM_COSMETIC.size > 0;
 
 
         const browserEvidence =
-            evidenceMap.BROWSER_ENGINE.size;
+            evidenceMap.BROWSER_ENGINE.size > 0;
 
 
         const resource =
-            evidenceMap.RESOURCE.size;
+            evidenceMap.RESOURCE.size > 0;
 
 
         const removal =
-            evidenceMap.REMOVAL.size;
+            evidenceMap.REMOVAL.size > 0;
 
+
+        const concreteCategories =
+            [
+                cosmetic,
+                resource,
+                removal
+            ].filter(Boolean).length;
+
+
+        // ------------------------------------------------------
+        // Strong combinations
+        // ------------------------------------------------------
 
         const networkDom =
-            network > 0 &&
-            cosmetic > 0;
+            network &&
+            cosmetic;
 
 
-        const removalNetwork =
-            network > 0 &&
-            removal > 0;
+        const networkResource =
+            network &&
+            resource;
+
+
+        const networkRemoval =
+            network &&
+            removal;
 
 
         const resourceDom =
-            resource > 0 &&
-            cosmetic > 0;
+            resource &&
+            cosmetic;
+
+
+        const removalDom =
+            removal &&
+            cosmetic;
 
 
         const multiSignal =
-            network > 0 &&
-            cosmetic > 0 &&
+            network &&
+            cosmetic &&
             (
-                resource > 0 ||
-                removal > 0 ||
-                browserEvidence > 0
+                resource ||
+                removal ||
+                browserEvidence
             );
 
 
         /*
-         * FINAL LOCK
+         * Browser evidence alone can NEVER lock.
+         *
+         * Pure network probe failure alone
+         * can NEVER lock.
          */
+        const strongCombination =
+            networkDom ||
+            networkResource ||
+            networkRemoval ||
+            resourceDom ||
+            removalDom ||
+            multiSignal ||
+            (
+                cosmetic &&
+                evidenceMap.DOM_COSMETIC.size >= 2
+            );
+
+
+        // ------------------------------------------------------
+        // FINAL LOCK
+        // ------------------------------------------------------
         if (
             detectionScore >=
                 getThreshold() &&
 
-            categories >= 2 &&
+            concreteCategories >= 1 &&
 
-            (
-                networkDom ||
-                removalNetwork ||
-                resourceDom ||
-                multiSignal
-            )
+            strongCombination
         ) {
 
             /*
@@ -782,11 +933,49 @@
 
 
         /*
-         * Never accumulate blocker evidence
-         * after a legitimate ad is known.
+         * If a legitimate ad has already rendered,
+         * ignore network/browser-only noise during
+         * the protection period.
          */
-        if (legitAdRendered) {
-            return;
+        if (
+            legitAdRendered
+        ) {
+
+            const protectedWindow =
+                performance.now() -
+                lastAdRenderTime <
+                REBLOCK_GRACE;
+
+
+            if (
+                protectedWindow ||
+                category === "NETWORK" ||
+                category === "BROWSER_ENGINE"
+            ) {
+
+                return;
+            }
+
+
+            /*
+             * Fresh concrete evidence after the
+             * protection window can reopen monitoring.
+             */
+            if (
+                category === "DOM_COSMETIC" ||
+                category === "RESOURCE" ||
+                category === "REMOVAL"
+            ) {
+
+                legitAdRendered = false;
+
+                missingAdChecks = 0;
+
+                blockerState =
+                    "MONITORING";
+
+                clearDetectionEvidence();
+            }
         }
 
 
@@ -794,20 +983,18 @@
             performance.now();
 
 
+        const previous =
+            incidentMap.get(id);
+
+
         if (
-            incidentMap.has(id) &&
-            now -
-                incidentMap.get(id) <
-                INCIDENT_COOLDOWN
+            previous &&
+            now - previous.timestamp <
+            INCIDENT_COOLDOWN
         ) {
+
             return;
         }
-
-
-        incidentMap.set(
-            id,
-            now
-        );
 
 
         const weight =
@@ -815,13 +1002,13 @@
             WEIGHTS.WEAK;
 
 
-        detectionScore +=
-            weight;
-
-
-        categoryState[
-            category
-        ] = true;
+        incidentMap.set(
+            id,
+            {
+                timestamp: now,
+                weight: weight
+            }
+        );
 
 
         if (
@@ -830,95 +1017,10 @@
 
             evidenceMap[
                 category
-            ].add(
-                source || id
+            ].set(
+                source || id,
+                now
             );
-        }
-
-
-        // ------------------------------------------------------
-        // CORRELATION BONUSES
-        // ------------------------------------------------------
-
-        if (
-            evidenceMap.NETWORK.size > 0 &&
-            evidenceMap.DOM_COSMETIC.size > 0
-        ) {
-
-            if (
-                !correlationMap.has(
-                    "network-dom"
-                )
-            ) {
-
-                correlationMap.add(
-                    "network-dom"
-                );
-
-                detectionScore += 25;
-            }
-        }
-
-
-        if (
-            evidenceMap.NETWORK.size > 0 &&
-            evidenceMap.REMOVAL.size > 0
-        ) {
-
-            if (
-                !correlationMap.has(
-                    "network-removal"
-                )
-            ) {
-
-                correlationMap.add(
-                    "network-removal"
-                );
-
-                detectionScore += 25;
-            }
-        }
-
-
-        if (
-            evidenceMap.RESOURCE.size > 0 &&
-            evidenceMap.DOM_COSMETIC.size > 0
-        ) {
-
-            if (
-                !correlationMap.has(
-                    "resource-dom"
-                )
-            ) {
-
-                correlationMap.add(
-                    "resource-dom"
-                );
-
-                detectionScore += 20;
-            }
-        }
-
-
-        if (
-            evidenceMap.NETWORK.size > 0 &&
-            evidenceMap.DOM_COSMETIC.size > 0 &&
-            evidenceMap.RESOURCE.size > 0 &&
-            evidenceMap.REMOVAL.size > 0
-        ) {
-
-            if (
-                !correlationMap.has(
-                    "full-correlation"
-                )
-            ) {
-
-                correlationMap.add(
-                    "full-correlation"
-                );
-
-                detectionScore += 30;
-            }
         }
 
 
@@ -933,7 +1035,8 @@
     // 🌐 NETWORK INCIDENT
     // ==========================================================
     function networkIncident(
-        source
+        source,
+        confidence = "MEDIUM"
     ) {
 
         if (!navigator.onLine) {
@@ -943,7 +1046,7 @@
 
         registerIncident(
             "network:" + source,
-            "MEDIUM",
+            confidence,
             "NETWORK",
             source
         );
@@ -1016,15 +1119,9 @@
                 /*
                  * IMPORTANT:
                  *
-                 * The bait itself is NOT hidden by
-                 * display:none / visibility:hidden.
-                 *
-                 * It is simply positioned outside
+                 * The bait itself is NOT hidden.
+                 * It is only positioned outside
                  * the viewport.
-                 *
-                 * This prevents the detector from
-                 * interpreting its own hidden state
-                 * as blocker evidence.
                  */
                 bait.style.cssText =
                     "display:block!important;" +
@@ -1082,16 +1179,6 @@
                         );
 
 
-                    /*
-                     * The bait should naturally remain:
-                     *
-                     * display:block
-                     * visibility:visible
-                     * height:1px
-                     *
-                     * Its off-screen position is intentional
-                     * and therefore NOT considered suspicious.
-                     */
                     const suspicious =
                         style.display === "none" ||
                         style.visibility === "hidden" ||
@@ -1146,7 +1233,7 @@
                 ) {
 
                     /*
-                     * A real visible ad immediately wins.
+                     * Visible iframe immediately wins.
                      */
                     if (
                         element.querySelector(
@@ -1250,6 +1337,25 @@
     // ==========================================================
     function checkBrowserSignals() {
 
+        const now =
+            performance.now();
+
+
+        /*
+         * Browser detection is intentionally throttled.
+         */
+        if (
+            now - lastBrowserCheck <
+            3000
+        ) {
+            return;
+        }
+
+
+        lastBrowserCheck =
+            now;
+
+
         let score = 0;
 
 
@@ -1346,7 +1452,6 @@
                         const rect =
                             iframe.getBoundingClientRect();
 
-
                         const style =
                             window.getComputedStyle(
                                 iframe
@@ -1396,8 +1501,6 @@
             visibleAds > 0
         ) {
 
-            detectionScore = 0;
-
             clearDetectionEvidence();
 
             unlockPage();
@@ -1407,7 +1510,13 @@
 
 
         /*
-         * RE-BLOCK VERIFICATION
+         * IMPORTANT:
+         *
+         * Missing ad alone does NOT immediately
+         * mean blocker.
+         *
+         * Fresh concrete evidence is required
+         * for re-blocking.
          */
         if (
             legitAdRendered &&
@@ -1422,14 +1531,17 @@
                 AD_MISSING_CONFIRMATIONS
             ) {
 
-                legitAdRendered = false;
-
+                /*
+                 * Do NOT immediately mark blocker.
+                 *
+                 * We simply enter monitoring.
+                 * Concrete evidence can later reopen
+                 * the detection engine.
+                 */
                 missingAdChecks = 0;
 
                 blockerState =
                     "MONITORING";
-
-                clearDetectionEvidence();
             }
         }
     }
@@ -1471,7 +1583,8 @@
 
 
                 networkIncident(
-                    "resource"
+                    "resource",
+                    "MEDIUM"
                 );
             }
 
@@ -1529,7 +1642,8 @@
                         ) {
 
                             networkIncident(
-                                "xhr"
+                                "xhr",
+                                "MEDIUM"
                             );
 
 
@@ -1593,7 +1707,8 @@
                             ) {
 
                                 networkIncident(
-                                    "fetch-status"
+                                    "fetch-status",
+                                    "MEDIUM"
                                 );
                             }
 
@@ -1610,7 +1725,8 @@
                             ) {
 
                                 networkIncident(
-                                    "fetch"
+                                    "fetch",
+                                    "MEDIUM"
                                 );
 
 
@@ -1636,6 +1752,9 @@
     // ==========================================================
     function runPixelTest() {
 
+        /*
+         * Pixel failure is weak evidence only.
+         */
         const pixel =
             new Image();
 
@@ -1648,7 +1767,8 @@
             () => {
 
                 networkIncident(
-                    "pixel"
+                    "pixel",
+                    "WEAK"
                 );
             };
 
@@ -1679,8 +1799,15 @@
             error
         ) {
 
+            /*
+             * HEAD/no-cors failure can happen for
+             * normal network reasons.
+             *
+             * Therefore it is weak evidence only.
+             */
             networkIncident(
-                "fetch-test"
+                "fetch-test",
+                "WEAK"
             );
         }
     }
@@ -1793,6 +1920,46 @@
                                         }
                                     }
                                 );
+
+
+                            /*
+                             * Only react to attribute changes
+                             * that can affect ad visibility/loading.
+                             */
+                            if (
+                                mutation.type ===
+                                "attributes"
+                            ) {
+
+                                const target =
+                                    mutation.target;
+
+
+                                if (
+                                    target?.matches?.(
+                                        ".adsbygoogle, ins.adsbygoogle, iframe"
+                                    ) ||
+                                    target?.closest?.(
+                                        ".adsbygoogle, ins.adsbygoogle"
+                                    )
+                                ) {
+
+                                    setTimeout(
+                                        () => {
+
+                                            checkRealAdRender();
+
+                                            inspectAdState();
+
+                                            checkCosmetic();
+
+                                            evaluate();
+
+                                        },
+                                        100
+                                    );
+                                }
+                            }
                         }
                     );
                 }
@@ -1826,7 +1993,7 @@
             delay => {
 
                 setTimeout(
-                    () => {
+                    async () => {
 
                         if (
                             !navigator.onLine
@@ -1878,8 +2045,16 @@
         inspectAdState();
 
 
+        /*
+         * Do not run blocker evaluation
+         * while legitimate ad protection
+         * window is active.
+         */
         if (
-            legitAdRendered
+            legitAdRendered &&
+            performance.now() -
+                lastAdRenderTime <
+            REBLOCK_GRACE
         ) {
             return;
         }
@@ -1911,6 +2086,20 @@
          */
         if (
             checkRealAdRender()
+        ) {
+            return;
+        }
+
+
+        /*
+         * During the real-ad protection window,
+         * don't perform network probes.
+         */
+        if (
+            legitAdRendered &&
+            performance.now() -
+                lastAdRenderTime <
+            REBLOCK_GRACE
         ) {
             return;
         }
