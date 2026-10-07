@@ -10,19 +10,29 @@
 
     window.__MERAYOUR_ADGUARD_ACTIVE__ = true;
 
-
     // ==========================================================
-    // 🛑 BLOGGER PREVIEW BYPASS
+    // 🛑 BLOGGER PREVIEW BYPASS - REPAIRED
     // ==========================================================
     function isBloggerPreview() {
 
         const host =
             (window.location.hostname || "").toLowerCase();
 
+        const href =
+            (window.location.href || "").toLowerCase();
+
+        const search =
+            (window.location.search || "").toLowerCase();
+
         const path =
             (window.location.pathname || "").toLowerCase();
 
+        const ref =
+            (document.referrer || "").toLowerCase();
+
         if (
+            host.includes("blogger.com") ||
+            host.includes("draft.blogger.com") ||
             host === "www.blogger.com" ||
             host.endsWith(".blogger.com")
         ) {
@@ -31,7 +41,20 @@
 
         if (
             path.includes("/b/post-preview") ||
-            path.includes("/blog/post/edit/preview/")
+            path.includes("/blog/post/edit/preview/") ||
+            href.includes("bpreview") ||
+            href.includes("preview=true") ||
+            href.includes("ispreview") ||
+            search.includes("bpreview") ||
+            search.includes("preview")
+        ) {
+            return true;
+        }
+
+        // Blogger preview always in iframe
+        if (
+            window!== window.top &&
+            ref.includes("blogger.com")
         ) {
             return true;
         }
@@ -42,7 +65,6 @@
     if (isBloggerPreview()) {
         return;
     }
-
 
     // ==========================================================
     // ⚙️ CONFIGURATION
@@ -62,7 +84,6 @@
             "Once your blocker is disabled for this site, you can Refresh and continue reading normally."
     };
 
-
     // ==========================================================
     // 🧠 DETECTION WEIGHTS
     // ==========================================================
@@ -76,7 +97,6 @@
 
         WEAK: 10
     };
-
 
     // ==========================================================
     // 🎯 ENGINE STATE
@@ -93,12 +113,13 @@
 
     let lastBrowserCheck = 0;
 
+    const pageLoadStart =
+        performance.now();
 
     // ----------------------------------------------------------
     // Active incidents
     // ----------------------------------------------------------
     const incidentMap = new Map();
-
 
     // ----------------------------------------------------------
     // Evidence is timestamped
@@ -116,11 +137,12 @@
         REMOVAL: new Map()
     };
 
-
     // ==========================================================
-    // ⏱️ TIMING
+    // ⏱️ TIMING - REPAIRED
     // ==========================================================
     const INITIAL_GRACE = 2500;
+
+    const ADSENSE_LOAD_GRACE = 8000;
 
     const INCIDENT_TTL = 4000;
 
@@ -128,14 +150,13 @@
 
     const INCIDENT_COOLDOWN = 1500;
 
-    const LOCAL_WATCH_INTERVAL = 700;
+    const LOCAL_WATCH_INTERVAL = 1000;
 
-    const NETWORK_WATCH_INTERVAL = 5000;
+    const NETWORK_WATCH_INTERVAL = 10000;
 
     const AD_MISSING_CONFIRMATIONS = 6;
 
     const REBLOCK_GRACE = 5000;
-
 
     const delayedChecks = [
 
@@ -148,10 +169,9 @@
         9000
     ];
 
-
     const nowReady = () =>
-        performance.now() >= INITIAL_GRACE;
-
+        performance.now() >= INITIAL_GRACE &&
+        performance.now() - pageLoadStart >= ADSENSE_LOAD_GRACE;
 
     // ==========================================================
     // 🌐 BROWSER CLASSIFICATION
@@ -162,16 +182,15 @@
     const vendor =
         (navigator.vendor || "").toLowerCase();
 
-
     const browser = {
 
         soul:
             ua.includes("soul") ||
-            !!window.soul ||
-            !!window.__soul_ext__,
+           !!window.soul ||
+           !!window.__soul_ext__,
 
         brave:
-            !!(
+           !!(
                 navigator.brave &&
                 typeof navigator.brave.isBrave ===
                     "function"
@@ -182,7 +201,7 @@
             ua.includes("opr/"),
 
         chrome:
-            !!window.chrome &&
+           !!window.chrome &&
             vendor.includes("google"),
 
         edge:
@@ -193,9 +212,8 @@
 
         safari:
             /safari/.test(ua) &&
-            !/chrome|crios|android/.test(ua)
+           !/chrome|crios|android/.test(ua)
     };
-
 
     const knownStandardBrowser =
         browser.chrome ||
@@ -203,9 +221,8 @@
         browser.firefox ||
         browser.safari;
 
-
     // ==========================================================
-    // 🎚️ INTELLIGENT THRESHOLD
+    // 🎚️ INTELLIGENT THRESHOLD - REPAIRED
     // ==========================================================
     function getThreshold() {
 
@@ -218,16 +235,14 @@
                 lastAdRenderTime <
                 REBLOCK_GRACE
             )
-                ? 135
+               ? 135
                 : 110;
         }
 
-
         return knownStandardBrowser
-            ? 105
-            : 100;
+           ? 125
+            : 110;
     }
-
 
     // ==========================================================
     // 🧹 PRUNE OLD EVIDENCE
@@ -236,7 +251,6 @@
 
         const now =
             performance.now();
-
 
         incidentMap.forEach(
             (entry, id) => {
@@ -251,13 +265,11 @@
             }
         );
 
-
         Object.keys(evidenceMap)
-            .forEach(category => {
+           .forEach(category => {
 
                 const map =
                     evidenceMap[category];
-
 
                 map.forEach(
                     (timestamp, source) => {
@@ -274,7 +286,6 @@
             });
     }
 
-
     // ==========================================================
     // 🧮 ACTIVE SCORE
     // ==========================================================
@@ -282,9 +293,7 @@
 
         pruneEvidence();
 
-
         let score = 0;
-
 
         incidentMap.forEach(
             entry => {
@@ -300,7 +309,6 @@
             }
         );
 
-
         const network =
             evidenceMap.NETWORK.size > 0;
 
@@ -312,7 +320,6 @@
 
         const removal =
             evidenceMap.REMOVAL.size > 0;
-
 
         // ------------------------------------------------------
         // Correlation bonuses
@@ -326,7 +333,6 @@
             score += 25;
         }
 
-
         if (
             network &&
             removal
@@ -335,7 +341,6 @@
             score += 25;
         }
 
-
         if (
             resource &&
             cosmetic
@@ -343,7 +348,6 @@
 
             score += 20;
         }
-
 
         if (
             network &&
@@ -355,10 +359,8 @@
             score += 30;
         }
 
-
         return score;
     }
-
 
     // ==========================================================
     // 🧹 CLEAR SUSPICION
@@ -367,14 +369,12 @@
 
         incidentMap.clear();
 
-
         Object.keys(evidenceMap)
-            .forEach(category => {
+           .forEach(category => {
 
                 evidenceMap[category].clear();
             });
     }
-
 
     // ==========================================================
     // ⭐ STRONG REAL ADSENSE RENDER DETECTION
@@ -383,12 +383,10 @@
 
         const ads =
             document.querySelectorAll(
-                "ins.adsbygoogle, .adsbygoogle"
+                "ins.adsbygoogle,.adsbygoogle"
             );
 
-
         let rendered = false;
-
 
         ads.forEach(ad => {
 
@@ -396,17 +394,14 @@
                 return;
             }
 
-
             const frames =
                 ad.querySelectorAll("iframe");
-
 
             frames.forEach(iframe => {
 
                 if (rendered) {
                     return;
                 }
-
 
                 const rect =
                     iframe.getBoundingClientRect();
@@ -416,14 +411,12 @@
                         iframe
                     );
 
-
                 const visible =
                     rect.width > 0 &&
                     rect.height > 0 &&
-                    style.display !== "none" &&
-                    style.visibility !== "hidden" &&
-                    style.opacity !== "0";
-
+                    style.display!== "none" &&
+                    style.visibility!== "hidden" &&
+                    style.opacity!== "0";
 
                 if (visible) {
 
@@ -432,7 +425,6 @@
             });
 
         });
-
 
         if (rendered) {
 
@@ -451,10 +443,8 @@
             unlockPage();
         }
 
-
         return rendered;
     }
-
 
     // ==========================================================
     // 🔓 UNLOCK PAGE
@@ -466,95 +456,81 @@
                 "ag-lock-overlay"
             );
 
-
         if (overlay) {
             overlay.remove();
         }
-
 
         const lockStyle =
             document.getElementById(
                 "ag-lock-style"
             );
 
-
         if (lockStyle) {
             lockStyle.remove();
         }
 
-
         pageLocked = false;
-
 
         if (document.documentElement) {
 
             document.documentElement.style
-                .removeProperty("overflow");
+               .removeProperty("overflow");
 
             document.documentElement.style
-                .removeProperty("height");
+               .removeProperty("height");
 
             document.documentElement.style
-                .removeProperty("user-select");
+               .removeProperty("user-select");
         }
-
 
         if (document.body) {
 
             document.body.style
-                .removeProperty("overflow");
+               .removeProperty("overflow");
 
             document.body.style
-                .removeProperty("height");
+               .removeProperty("height");
 
             document.body.style
-                .removeProperty("user-select");
+               .removeProperty("user-select");
         }
     }
 
-
     // ==========================================================
-    // 🔒 LOCK PAGE
+    // 🔒 LOCK PAGE - REPAIRED
     // ==========================================================
     function lockPage() {
 
-        /*
-         * FINAL SAFETY GATE
-         *
-         * Never lock if a real visible ad
-         * exists at this exact moment.
-         */
         if (
             checkRealAdRender()
         ) {
             return;
         }
 
-
         if (pageLocked) {
             return;
         }
-
 
         if (legitAdRendered) {
             return;
         }
 
+        if (
+            performance.now() - pageLoadStart <
+            ADSENSE_LOAD_GRACE
+        ) {
+            return;
+        }
 
         pageLocked = true;
 
         blockerState =
             "CONFIRMED";
 
-
-        // ------------------------------------------------------
-        // DESTROY ARTICLE CONTENT
-        // ------------------------------------------------------
         const mainContent =
             document.querySelector(
-                "article, .post-body, .entry-content, main, #main-content"
+                "article,.post-body,.entry-content, main, #main-content"
             );
-
 
         if (mainContent) {
 
@@ -576,7 +552,6 @@
             `;
         }
 
-
         if (
             document.getElementById(
                 "ag-lock-overlay"
@@ -585,15 +560,10 @@
             return;
         }
 
-
-        // ------------------------------------------------------
-        // LOCK STYLE
-        // ------------------------------------------------------
         let style =
             document.getElementById(
                 "ag-lock-style"
             );
-
 
         if (!style) {
 
@@ -602,127 +572,80 @@
                     "style"
                 );
 
-
             style.id =
                 "ag-lock-style";
-
 
             style.textContent = `
                 html,
                 body {
-                    overflow: hidden !important;
-
-                    -webkit-user-select: none !important;
-                    -moz-user-select: none !important;
-                    -ms-user-select: none !important;
-                    user-select: none !important;
+                    overflow: hidden!important;
+                    -webkit-user-select: none!important;
+                    -moz-user-select: none!important;
+                    -ms-user-select: none!important;
+                    user-select: none!important;
                 }
-
                 #ag-lock-overlay {
                     position: fixed;
                     inset: 0;
-
                     width: 100vw;
                     height: 100vh;
-
                     background: #0d1117;
                     color: #fff;
-
                     z-index: 2147483647;
-
                     display: flex;
                     align-items: center;
                     justify-content: center;
-
                     padding: 20px;
                     box-sizing: border-box;
-
-                    font-family:
-                        system-ui,
-                        -apple-system,
-                        BlinkMacSystemFont,
-                        "Segoe UI",
-                        Roboto,
-                        sans-serif;
-
+                    font-family: system-ui, sans-serif;
                     text-align: center;
                 }
-
-                .ag-card {
+               .ag-card {
                     width: 100%;
                     max-width: 400px;
-
                     padding: 32px 24px;
-
                     background: #161b22;
-
-                    border:
-                        1px solid #30363d;
-
+                    border: 1px solid #30363d;
                     border-radius: 12px;
-
-                    box-shadow:
-                        0 10px 25px
-                        rgba(0,0,0,.5);
-
-                    box-sizing: border-box;
+                    box-shadow: 0 10px 25px rgba(0,0,0,.5);
                 }
-
-                .ag-logo {
+               .ag-logo {
                     max-width: 80px;
                     max-height: 80px;
-
                     margin-bottom: 16px;
-
                     border-radius: 8px;
-
                     object-fit: contain;
                 }
-
                 #ag-lock-overlay h1 {
                     margin: 0 0 12px;
-
                     font-size: 22px;
-
                     color: #f0f6fc;
-
                     font-weight: 600;
                 }
-
                 #ag-lock-overlay p {
                     margin: 0;
-
                     font-size: 14px;
-
                     color: #8b949e;
-
                     line-height: 1.6;
                 }
             `;
-
 
             document.head.appendChild(
                 style
             );
         }
 
-
-        // ------------------------------------------------------
-        // OVERLAY
-        // ------------------------------------------------------
         const overlay =
             document.createElement(
                 "div"
             );
 
-
         overlay.id =
             "ag-lock-overlay";
 
-
         const logo =
             CONFIG.logoUrl
-                ? `
+               ? `
                     <img
                         src="${CONFIG.logoUrl}"
                         alt="Merayour"
@@ -732,23 +655,17 @@
                   `
                 : "";
 
-
         overlay.innerHTML = `
             <div class="ag-card">
-
                 ${logo}
-
                 <h1>
                     ${CONFIG.title}
                 </h1>
-
                 <p>
                     ${CONFIG.message}
                 </p>
-
             </div>
         `;
-
 
         (
             document.body ||
@@ -758,16 +675,14 @@
         );
     }
 
-
     // ==========================================================
-    // 🧠 FINAL DECISION ENGINE
+    // 🧠 FINAL DECISION ENGINE - REPAIRED
     // ==========================================================
     function evaluate() {
 
         if (!navigator.onLine) {
             return;
         }
-
 
         if (
             document.readyState ===
@@ -776,48 +691,35 @@
             return;
         }
 
-
-        /*
-         * REAL AD ALWAYS WINS
-         */
         if (
             checkRealAdRender()
         ) {
             return;
         }
 
-
         if (!nowReady()) {
             return;
         }
 
-
         pruneEvidence();
-
 
         const detectionScore =
             calculateScore();
 
-
         const network =
             evidenceMap.NETWORK.size > 0;
-
 
         const cosmetic =
             evidenceMap.DOM_COSMETIC.size > 0;
 
-
         const browserEvidence =
             evidenceMap.BROWSER_ENGINE.size > 0;
-
 
         const resource =
             evidenceMap.RESOURCE.size > 0;
 
-
         const removal =
             evidenceMap.REMOVAL.size > 0;
-
 
         const concreteCategories =
             [
@@ -826,35 +728,25 @@
                 removal
             ].filter(Boolean).length;
 
-
-        // ------------------------------------------------------
-        // Strong combinations
-        // ------------------------------------------------------
-
         const networkDom =
             network &&
             cosmetic;
-
 
         const networkResource =
             network &&
             resource;
 
-
         const networkRemoval =
             network &&
             removal;
-
 
         const resourceDom =
             resource &&
             cosmetic;
 
-
         const removalDom =
             removal &&
             cosmetic;
-
 
         const multiSignal =
             network &&
@@ -865,29 +757,17 @@
                 browserEvidence
             );
 
-
-        /*
-         * Browser evidence alone can NEVER lock.
-         *
-         * Pure network probe failure alone
-         * can NEVER lock.
-         */
+        // REPAIRED: Sirf cosmetic >=2 se lock nahi hoga, network compulsory
         const strongCombination =
-            networkDom ||
+            (networkDom ||
             networkResource ||
             networkRemoval ||
             resourceDom ||
             removalDom ||
-            multiSignal ||
-            (
-                cosmetic &&
-                evidenceMap.DOM_COSMETIC.size >= 2
-            );
+            multiSignal) &&
+            network &&
+            cosmetic;
 
-
-        // ------------------------------------------------------
-        // FINAL LOCK
-        // ------------------------------------------------------
         if (
             detectionScore >=
                 getThreshold() &&
@@ -897,25 +777,18 @@
             strongCombination
         ) {
 
-            /*
-             * One last real-ad check immediately
-             * before locking.
-             */
             if (
                 checkRealAdRender()
             ) {
                 return;
             }
 
-
             blockerState =
                 "CONFIRMED";
-
 
             lockPage();
         }
     }
-
 
     // ==========================================================
     // 🎯 INCIDENT REGISTRATION
@@ -931,12 +804,6 @@
             return;
         }
 
-
-        /*
-         * If a legitimate ad has already rendered,
-         * ignore network/browser-only noise during
-         * the protection period.
-         */
         if (
             legitAdRendered
         ) {
@@ -945,7 +812,6 @@
                 performance.now() -
                 lastAdRenderTime <
                 REBLOCK_GRACE;
-
 
             if (
                 protectedWindow ||
@@ -956,11 +822,6 @@
                 return;
             }
 
-
-            /*
-             * Fresh concrete evidence after the
-             * protection window can reopen monitoring.
-             */
             if (
                 category === "DOM_COSMETIC" ||
                 category === "RESOURCE" ||
@@ -978,14 +839,11 @@
             }
         }
 
-
         const now =
             performance.now();
 
-
         const previous =
             incidentMap.get(id);
-
 
         if (
             previous &&
@@ -996,11 +854,9 @@
             return;
         }
 
-
         const weight =
             WEIGHTS[confidence] ||
             WEIGHTS.WEAK;
-
 
         incidentMap.set(
             id,
@@ -1009,7 +865,6 @@
                 weight: weight
             }
         );
-
 
         if (
             evidenceMap[category]
@@ -1023,16 +878,14 @@
             );
         }
 
-
         setTimeout(
             evaluate,
             300
         );
     }
 
-
     // ==========================================================
-    // 🌐 NETWORK INCIDENT
+    // 🌐 NETWORK INCIDENT - REPAIRED
     // ==========================================================
     function networkIncident(
         source,
@@ -1043,6 +896,12 @@
             return;
         }
 
+        if (
+            performance.now() - pageLoadStart <
+            ADSENSE_LOAD_GRACE
+        ) {
+            return;
+        }
 
         registerIncident(
             "network:" + source,
@@ -1052,11 +911,14 @@
         );
     }
 
-
     // ==========================================================
-    // 🪤 MULTI BAIT SYSTEM
+    // 🪤 MULTI BAIT SYSTEM - REPAIRED
     // ==========================================================
     function createBaits() {
+
+        if (!document.body) {
+            return;
+        }
 
         const baitConfigs = [
 
@@ -1085,7 +947,6 @@
             }
         ];
 
-
         baitConfigs.forEach(
             config => {
 
@@ -1097,32 +958,20 @@
                     return;
                 }
 
-
                 const bait =
                     document.createElement(
                         "div"
                     );
 
-
                 bait.id =
                     config.id;
-
 
                 bait.dataset.agBait =
                     "true";
 
-
                 bait.className =
                     config.classes;
 
-
-                /*
-                 * IMPORTANT:
-                 *
-                 * The bait itself is NOT hidden.
-                 * It is only positioned outside
-                 * the viewport.
-                 */
                 bait.style.cssText =
                     "display:block!important;" +
                     "visibility:visible!important;" +
@@ -1134,7 +983,6 @@
                     "opacity:1!important;" +
                     "pointer-events:none!important;";
 
-
                 (
                     document.body ||
                     document.documentElement
@@ -1145,14 +993,24 @@
         );
     }
 
-
     // ==========================================================
-    // 🎨 ADVANCED COSMETIC DETECTION
+    // 🎨 ADVANCED COSMETIC DETECTION - REPAIRED
     // ==========================================================
     function checkCosmetic() {
 
         createBaits();
 
+        // REPAIRED: AdSense script load hone tak check skip
+        const isAdScriptLoading =
+            typeof window.adsbygoogle === 'undefined';
+
+        if (
+            isAdScriptLoading &&
+            performance.now() - pageLoadStart <
+            ADSENSE_LOAD_GRACE
+        ) {
+            return;
+        }
 
         const targets =
             document.querySelectorAll(
@@ -1161,13 +1019,9 @@
                 ".adsbygoogle"
             );
 
-
         targets.forEach(
             element => {
 
-                // ------------------------------------------------
-                // BAIT CHECK
-                // ------------------------------------------------
                 if (
                     element.dataset.agBait ===
                     "true"
@@ -1178,12 +1032,10 @@
                             element
                         );
 
-
+                    // REPAIRED: offsetHeight === 0 hatao, sirf display:none
                     const suspicious =
                         style.display === "none" ||
-                        style.visibility === "hidden" ||
-                        element.offsetHeight === 0;
-
+                        style.visibility === "hidden";
 
                     if (suspicious) {
 
@@ -1194,13 +1046,11 @@
                                 10
                             ) + 1;
 
-
                         element.dataset.hits =
                             String(hits);
 
-
                         if (
-                            hits >= 2
+                            hits >= 3
                         ) {
 
                             registerIncident(
@@ -1218,23 +1068,15 @@
                             "0";
                     }
 
-
                     return;
                 }
 
-
-                // ------------------------------------------------
-                // REAL AD SLOT
-                // ------------------------------------------------
                 if (
                     element.matches(
-                        "ins.adsbygoogle, .adsbygoogle"
+                        "ins.adsbygoogle,.adsbygoogle"
                     )
                 ) {
 
-                    /*
-                     * Visible iframe immediately wins.
-                     */
                     if (
                         element.querySelector(
                             "iframe"
@@ -1246,7 +1088,6 @@
                                 "iframe"
                             );
 
-
                         for (
                             const iframe
                             of frames
@@ -1254,7 +1095,6 @@
 
                             const rect =
                                 iframe.getBoundingClientRect();
-
 
                             if (
                                 rect.width > 0 &&
@@ -1266,10 +1106,6 @@
                         }
                     }
 
-
-                    /*
-                     * Unfilled is neutral.
-                     */
                     if (
                         element.getAttribute(
                             "data-ad-status"
@@ -1278,18 +1114,22 @@
                         return;
                     }
 
+                    // REPAIRED: Empty slot neutral
+                    if (
+                        element.innerHTML.trim() === ""
+                    ) {
+                        return;
+                    }
 
                     const style =
                         window.getComputedStyle(
                             element
                         );
 
-
+                    // REPAIRED: offsetHeight check hatao
                     const hidden =
                         style.display === "none" ||
-                        style.visibility === "hidden" ||
-                        element.offsetHeight === 0;
-
+                        style.visibility === "hidden";
 
                     if (hidden) {
 
@@ -1300,13 +1140,11 @@
                                 10
                             ) + 1;
 
-
                         element.dataset.hits =
                             String(hits);
 
-
                         if (
-                            hits >= 3
+                            hits >= 4
                         ) {
 
                             registerIncident(
@@ -1331,7 +1169,6 @@
         );
     }
 
-
     // ==========================================================
     // 🧬 BROWSER SIGNALS
     // ==========================================================
@@ -1340,10 +1177,6 @@
         const now =
             performance.now();
 
-
-        /*
-         * Browser detection is intentionally throttled.
-         */
         if (
             now - lastBrowserCheck <
             3000
@@ -1351,20 +1184,16 @@
             return;
         }
 
-
         lastBrowserCheck =
             now;
 
-
         let score = 0;
-
 
         if (
             browser.soul
         ) {
             score += 30;
         }
-
 
         if (
             window.soul ||
@@ -1378,13 +1207,11 @@
             score += 40;
         }
 
-
         if (
             browser.brave
         ) {
             score += 10;
         }
-
 
         if (
             browser.opera
@@ -1392,10 +1219,6 @@
             score += 5;
         }
 
-
-        /*
-         * Browser evidence is ONLY supporting evidence.
-         */
         if (
             score >= 60
         ) {
@@ -1420,7 +1243,6 @@
         }
     }
 
-
     // ==========================================================
     // 📦 AD STATE INSPECTION
     // ==========================================================
@@ -1428,14 +1250,11 @@
 
         const ads =
             document.querySelectorAll(
-                "ins.adsbygoogle, .adsbygoogle"
+                "ins.adsbygoogle,.adsbygoogle"
             );
 
-
         let visibleAds = 0;
-
         let usableAdSlot = false;
-
 
         ads.forEach(
             ad => {
@@ -1444,7 +1263,6 @@
                     ad.querySelectorAll(
                         "iframe"
                     );
-
 
                 frames.forEach(
                     iframe => {
@@ -1457,35 +1275,27 @@
                                 iframe
                             );
 
-
                         if (
                             rect.width > 0 &&
                             rect.height > 0 &&
-                            style.display !== "none" &&
-                            style.visibility !== "hidden" &&
-                            style.opacity !== "0"
+                            style.display!== "none" &&
+                            style.visibility!== "hidden" &&
+                            style.opacity!== "0"
                         ) {
 
                             visibleAds++;
-
                             usableAdSlot = true;
-
-                            legitAdRendered =
-                                true;
-
-                            lastAdRenderTime =
-                                performance.now();
-
+                            legitAdRendered = true;
+                            lastAdRenderTime = performance.now();
                             missingAdChecks = 0;
                         }
                     }
                 );
 
-
                 if (
                     ad.getAttribute(
                         "data-ad-status"
-                    ) !== "unfilled"
+                    )!== "unfilled"
                 ) {
 
                     usableAdSlot = true;
@@ -1493,31 +1303,15 @@
             }
         );
 
-
-        /*
-         * REAL VISIBLE AD
-         */
         if (
             visibleAds > 0
         ) {
 
             clearDetectionEvidence();
-
             unlockPage();
-
             return;
         }
 
-
-        /*
-         * IMPORTANT:
-         *
-         * Missing ad alone does NOT immediately
-         * mean blocker.
-         *
-         * Fresh concrete evidence is required
-         * for re-blocking.
-         */
         if (
             legitAdRendered &&
             usableAdSlot
@@ -1525,27 +1319,16 @@
 
             missingAdChecks++;
 
-
             if (
                 missingAdChecks >=
                 AD_MISSING_CONFIRMATIONS
             ) {
 
-                /*
-                 * Do NOT immediately mark blocker.
-                 *
-                 * We simply enter monitoring.
-                 * Concrete evidence can later reopen
-                 * the detection engine.
-                 */
                 missingAdChecks = 0;
-
-                blockerState =
-                    "MONITORING";
+                blockerState = "MONITORING";
             }
         }
     }
-
 
     // ==========================================================
     // 🚨 RESOURCE ERROR MONITOR
@@ -1558,20 +1341,17 @@
                 return;
             }
 
-
             const target =
                 event.target;
-
 
             const src =
                 target?.src ||
                 target?.href ||
                 "";
 
-
             if (
                 /googlesyndication|pagead2|doubleclick|googleadservices/i
-                    .test(src)
+                   .test(src)
             ) {
 
                 registerIncident(
@@ -1580,7 +1360,6 @@
                     "RESOURCE",
                     "resource_error"
                 );
-
 
                 networkIncident(
                     "resource",
@@ -1591,7 +1370,6 @@
         },
         true
     );
-
 
     // ==========================================================
     // ⚡ XHR INTERCEPTOR
@@ -1604,7 +1382,6 @@
         const originalSend =
             XMLHttpRequest.prototype.send;
 
-
         XMLHttpRequest.prototype.open =
             function (
                 method,
@@ -1613,16 +1390,14 @@
 
                 this.__ag_url =
                     typeof url === "string"
-                        ? url
+                       ? url
                         : "";
-
 
                 return originalOpen.apply(
                     this,
                     arguments
                 );
             };
-
 
         XMLHttpRequest.prototype.send =
             function () {
@@ -1635,17 +1410,15 @@
                             this.__ag_url ||
                             "";
 
-
                         if (
                             /pagead2|googlesyndication|doubleclick|googleadservices/i
-                                .test(url)
+                               .test(url)
                         ) {
 
                             networkIncident(
                                 "xhr",
                                 "MEDIUM"
                             );
-
 
                             registerIncident(
                                 "xhr:error:" + url,
@@ -1657,7 +1430,6 @@
                     }
                 );
 
-
                 return originalSend.apply(
                     this,
                     arguments
@@ -1666,44 +1438,40 @@
 
     })();
 
-
     // ==========================================================
     // ⚡ FETCH INTERCEPTOR
     // ==========================================================
     (function installFetchInterceptor() {
 
         if (
-            !window.fetch
+           !window.fetch
         ) {
             return;
         }
 
-
         const originalFetch =
             window.fetch;
-
 
         window.fetch =
             function (...args) {
 
                 const url =
                     typeof args[0] === "string"
-                        ? args[0]
+                       ? args[0]
                         : args[0]?.url || "";
 
-
                 return originalFetch
-                    .apply(
+                   .apply(
                         this,
                         args
                     )
-                    .then(
+                   .then(
                         response => {
 
                             if (
-                                !response.ok &&
+                               !response.ok &&
                                 /pagead2|googlesyndication|doubleclick|googleadservices/i
-                                    .test(url)
+                                   .test(url)
                             ) {
 
                                 networkIncident(
@@ -1712,23 +1480,21 @@
                                 );
                             }
 
-
                             return response;
                         }
                     )
-                    .catch(
+                   .catch(
                         error => {
 
                             if (
                                 /pagead2|googlesyndication|doubleclick|googleadservices/i
-                                    .test(url)
+                                   .test(url)
                             ) {
 
                                 networkIncident(
                                     "fetch",
                                     "MEDIUM"
                                 );
-
 
                                 registerIncident(
                                     "fetch:error:" + url,
@@ -1738,7 +1504,6 @@
                                 );
                             }
 
-
                             throw error;
                         }
                     );
@@ -1746,22 +1511,16 @@
 
     })();
 
-
     // ==========================================================
     // 🌐 NETWORK PIXEL TEST
     // ==========================================================
     function runPixelTest() {
 
-        /*
-         * Pixel failure is weak evidence only.
-         */
         const pixel =
             new Image();
 
-
         pixel.onload =
             () => {};
-
 
         pixel.onerror =
             () => {
@@ -1772,12 +1531,10 @@
                 );
             };
 
-
         pixel.src =
             "https://pagead2.googlesyndication.com/pagead/img/0.gif?" +
             Date.now();
     }
-
 
     // ==========================================================
     // 🌐 NETWORK FETCH TEST
@@ -1799,19 +1556,12 @@
             error
         ) {
 
-            /*
-             * HEAD/no-cors failure can happen for
-             * normal network reasons.
-             *
-             * Therefore it is weak evidence only.
-             */
             networkIncident(
                 "fetch-test",
                 "WEAK"
             );
         }
     }
-
 
     // ==========================================================
     // 🗑️ REMOVAL TRACKING
@@ -1821,11 +1571,10 @@
     ) {
 
         if (
-            node.nodeType !== 1
+            node.nodeType!== 1
         ) {
             return;
         }
-
 
         const isAd =
             node.classList?.contains(
@@ -1837,7 +1586,6 @@
             node.querySelector?.(
                 ".adsbygoogle, ins.adsbygoogle"
             );
-
 
         if (
             isAd
@@ -1857,7 +1605,6 @@
         }
     }
 
-
     // ==========================================================
     // 👀 ADVANCED DOM OBSERVER
     // ==========================================================
@@ -1871,24 +1618,22 @@
                         mutation => {
 
                             mutation
-                                .removedNodes
-                                .forEach(
+                               .removedNodes
+                               .forEach(
                                     inspectRemovedNode
                                 );
 
-
                             mutation
-                                .addedNodes
-                                .forEach(
+                               .addedNodes
+                               .forEach(
                                     node => {
 
                                         if (
-                                            node.nodeType !==
+                                            node.nodeType!==
                                             1
                                         ) {
                                             return;
                                         }
-
 
                                         const suspicious =
                                             node.matches?.(
@@ -1898,7 +1643,6 @@
                                                 ".adsbygoogle, ins.adsbygoogle"
                                             );
 
-
                                         if (
                                             suspicious
                                         ) {
@@ -1907,11 +1651,8 @@
                                                 () => {
 
                                                     checkRealAdRender();
-
                                                     inspectAdState();
-
                                                     checkCosmetic();
-
                                                     evaluate();
 
                                                 },
@@ -1921,11 +1662,6 @@
                                     }
                                 );
 
-
-                            /*
-                             * Only react to attribute changes
-                             * that can affect ad visibility/loading.
-                             */
                             if (
                                 mutation.type ===
                                 "attributes"
@@ -1933,7 +1669,6 @@
 
                                 const target =
                                     mutation.target;
-
 
                                 if (
                                     target?.matches?.(
@@ -1948,11 +1683,8 @@
                                         () => {
 
                                             checkRealAdRender();
-
                                             inspectAdState();
-
                                             checkCosmetic();
-
                                             evaluate();
 
                                         },
@@ -1964,7 +1696,6 @@
                     );
                 }
             );
-
 
         observer.observe(
             document.documentElement,
@@ -1983,7 +1714,6 @@
 
     })();
 
-
     // ==========================================================
     // 🔍 MULTI-PASS VERIFICATION
     // ==========================================================
@@ -1996,20 +1726,15 @@
                     async () => {
 
                         if (
-                            !navigator.onLine
+                           !navigator.onLine
                         ) {
                             return;
                         }
 
-
                         checkRealAdRender();
-
                         inspectAdState();
-
                         checkCosmetic();
-
                         checkBrowserSignals();
-
                         evaluate();
 
                     },
@@ -2019,37 +1744,25 @@
         );
     }
 
-
     // ==========================================================
     // 🛡️ FAST LOCAL WATCHDOG
     // ==========================================================
     function runLocalWatch() {
 
         if (
-            !navigator.onLine
+           !navigator.onLine
         ) {
             return;
         }
 
-
-        /*
-         * REAL AD FIRST
-         */
         if (
             checkRealAdRender()
         ) {
             return;
         }
 
-
         inspectAdState();
 
-
-        /*
-         * Do not run blocker evaluation
-         * while legitimate ad protection
-         * window is active.
-         */
         if (
             legitAdRendered &&
             performance.now() -
@@ -2059,14 +1772,10 @@
             return;
         }
 
-
         checkCosmetic();
-
         checkBrowserSignals();
-
         evaluate();
     }
-
 
     // ==========================================================
     // 🌐 NETWORK WATCHDOG
@@ -2074,27 +1783,17 @@
     async function runNetworkWatch() {
 
         if (
-            !navigator.onLine
+           !navigator.onLine
         ) {
             return;
         }
 
-
-        /*
-         * If a real ad already exists,
-         * network testing is unnecessary.
-         */
         if (
             checkRealAdRender()
         ) {
             return;
         }
 
-
-        /*
-         * During the real-ad protection window,
-         * don't perform network probes.
-         */
         if (
             legitAdRendered &&
             performance.now() -
@@ -2104,14 +1803,10 @@
             return;
         }
 
-
         runPixelTest();
-
         await runFetchTest();
-
         evaluate();
     }
-
 
     // ==========================================================
     // 🔄 MAIN CHECK
@@ -2121,9 +1816,8 @@
         runLocalWatch();
     }
 
-
     // ==========================================================
-    // 💓 INITIALIZATION
+    // 💓 INITIALIZATION - REPAIRED
     // ==========================================================
     function init() {
 
@@ -2131,15 +1825,12 @@
             () => {
 
                 runAllChecks();
-
                 scheduleDelayedVerification();
-
 
                 setInterval(
                     runLocalWatch,
                     LOCAL_WATCH_INTERVAL
                 );
-
 
                 setInterval(
                     runNetworkWatch,
@@ -2147,10 +1838,9 @@
                 );
 
             },
-            50
+            1000
         );
     }
-
 
     // ==========================================================
     // 🚀 START
