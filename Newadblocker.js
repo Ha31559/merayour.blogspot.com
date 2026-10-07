@@ -1,6 +1,60 @@
 (function () {
     "use strict";
 
+        // ==========================================================
+    // 🛑 BLOGGER PREVIEW BYPASS
+    // ==========================================================
+    function isBloggerPreview() {
+
+        const host =
+            (window.location.hostname || "")
+                .toLowerCase();
+
+        const path =
+            (window.location.pathname || "")
+                .toLowerCase();
+
+        /*
+         * Blogger editor / post preview
+         */
+        if (
+            host === "www.blogger.com" ||
+            host.endsWith(".blogger.com")
+        ) {
+            return true;
+        }
+
+        /*
+         * Blogger blog post preview
+         */
+        if (
+            path.includes("/b/post-preview") ||
+            path.includes("/blog/post/edit/preview/")
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /*
+     * IMPORTANT:
+     *
+     * If this is Blogger Preview,
+     * completely stop the detector.
+     *
+     * No bait
+     * No network test
+     * No popup
+     * No page lock
+     * No DOM modification
+     * No timers
+     */
+    if (isBloggerPreview()) {
+        return;
+    }
+
+    
     // ==========================================================
     // ⚙️ CONFIGURATION
     // ==========================================================
