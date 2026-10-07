@@ -8,12 +8,13 @@
         logoUrl:
             "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUY8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666",
 
-        title: "Hey Buddy!",
+        title: "Ad Blocker Detected!",
 
         message:
-            "Looks like a content blocker is active on your browser." +
-            "Merayour is made possible by the support of our readers, which helps us keep our stories free for everyone." +
-            "Please disable your content blocker or switch to a standard browser to continue reading."
+            "It looks like an ad or content blocker is preventing this page from loading properly. " +
+            "Merayour is a free website supported by readers and advertising, which helps us keep our stories available without a subscription. " +
+            "If you enjoy our stories, please consider Whitelisting or allowing ads on Merayour. " +
+            "Once your blocker is disabled for this site, you can Refresh and continue reading normally."
     };
 
 
