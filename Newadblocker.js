@@ -2,20 +2,9 @@
     "use strict";
 
     // ==========================================================
-    // MERAYOUR ADGUARD v2.2 - DECISION ENGINE ARCHITECTURE
-    // Production Build
-    //
-    // KEY UPGRADES v2.2:
-    // - Coordinated Google Ecosystem Engine (AdSense + Analytics + Consent)
-    // - Multi-signal Correlation Engine (No single weak signal triggers popup)
-    // - Repeated Confirmation Loop before Article Block + Popup
-    // - Instant Suspicion Clear on Real Ad Render
-    // - Blogger Preview & Duplicate Guards preserved
+    // MERAYOUR ADGUARD v2.2.1 - FALSE POSITIVE FIXED
     // ==========================================================
 
-    // ==========================================================
-    // 🛑 DUPLICATE GUARD
-    // ==========================================================
     if (window.__MERAYOUR_ADGUARD_ACTIVE__) {
         return;
     }
@@ -31,11 +20,7 @@
         const path = (location.pathname || "").toLowerCase();
         const ref = (document.referrer || "").toLowerCase();
 
-        if (
-            host === "blogger.com" ||
-            host.endsWith(".blogger.com") ||
-            host === "draft.blogger.com"
-        ) {
+        if (host === "blogger.com" || host.endsWith(".blogger.com") || host === "draft.blogger.com") {
             return true;
         }
 
@@ -63,10 +48,7 @@
             return true;
         }
 
-        if (
-            window !== window.top &&
-            (ref.includes("blogger.com") || ref.includes("blogspot.com"))
-        ) {
+        if (window !== window.top && (ref.includes("blogger.com") || ref.includes("blogspot.com"))) {
             return true;
         }
 
@@ -95,20 +77,10 @@
     // ⚖️ DETECTION WEIGHTS
     // ==========================================================
     const WEIGHTS = {
-        CRITICAL: 70,
-        STRONG: 40,
-        MEDIUM: 30,
+        CRITICAL: 50,
+        STRONG: 30,
+        MEDIUM: 20,
         WEAK: 10
-    };
-
-    // ==========================================================
-    // 🌐 GOOGLE ECOSYSTEM TRACKER (v2.2 ENGINE)
-    // ==========================================================
-    const googleEcosystem = {
-        adsenseBlocked: false,
-        analyticsBlocked: false,
-        consentBlocked: false,
-        resourceErrors: 0
     };
 
     // ==========================================================
@@ -145,16 +117,16 @@
     // ==========================================================
     // ⏱️ TIMING & CONFIRMATIONS
     // ==========================================================
-    const INITIAL_GRACE = 2500;
-    const ADSENSE_LOAD_GRACE = 8000;
+    const INITIAL_GRACE = 4000;
+    const ADSENSE_LOAD_GRACE = 10000;
     const INCIDENT_TTL = 4000;
-    const INCIDENT_COOLDOWN = 1500;
-    const LOCAL_WATCH_INTERVAL = 1000;
-    const NETWORK_WATCH_INTERVAL = 10000;
+    const INCIDENT_COOLDOWN = 2000;
+    const LOCAL_WATCH_INTERVAL = 1500;
+    const NETWORK_WATCH_INTERVAL = 12000;
     const AD_MISSING_CONFIRMATIONS = 6;
     const REBLOCK_GRACE = 5000;
     const CLEAN_CONFIRMATIONS_REQUIRED = 2;
-    const delayedChecks = [2500, 4000, 6500, 9000];
+    const delayedChecks = [4000, 7000, 10000];
 
     // ==========================================================
     // 🧠 ARTICLE RENDER STATE
@@ -169,9 +141,6 @@
     let articleRestoreInProgress = false;
     let articleBlockInProgress = false;
 
-    // ==========================================================
-    // 🧠 FIND ARTICLE CONTAINER
-    // ==========================================================
     function findMainContent() {
         if (mainContent && document.documentElement.contains(mainContent)) {
             return mainContent;
@@ -182,9 +151,6 @@
         return mainContent;
     }
 
-    // ==========================================================
-    // 💾 CAPTURE ORIGINAL ARTICLE HTML
-    // ==========================================================
     function captureOriginalArticle() {
         const target = findMainContent();
         if (!target) return false;
@@ -196,17 +162,11 @@
         return true;
     }
 
-    // ==========================================================
-    // 🕒 READY CHECK
-    // ==========================================================
     function nowReady() {
         const elapsed = performance.now() - pageLoadStart;
-        return elapsed >= INITIAL_GRACE && elapsed >= ADSENSE_LOAD_GRACE;
+        return elapsed >= ADSENSE_LOAD_GRACE;
     }
 
-    // ==========================================================
-    // 🌐 BROWSER INFORMATION
-    // ==========================================================
     const ua = (navigator.userAgent || "").toLowerCase();
     const vendor = (navigator.vendor || "").toLowerCase();
 
@@ -220,23 +180,10 @@
         safari: /safari/.test(ua) && !/chrome|crios|android/.test(ua)
     };
 
-    const knownStandardBrowser =
-        browser.chrome || browser.edge || browser.firefox || browser.safari;
-
-    // ==========================================================
-    // 🎯 THRESHOLD
-    // ==========================================================
     function getThreshold() {
-        let threshold = knownStandardBrowser ? 125 : 110;
-        if (legitAdRendered) {
-            threshold = 160;
-        }
-        return threshold;
+        return 140; // Strict threshold to eliminate false positives
     }
 
-    // ==========================================================
-    // 🧹 INCIDENT DECAY
-    // ==========================================================
     setInterval(() => {
         const now = performance.now();
         incidentMap.forEach((timestamp, id) => {
@@ -246,13 +193,10 @@
         });
 
         if (detectionScore > 0) {
-            detectionScore = Math.max(0, detectionScore - 5);
+            detectionScore = Math.max(0, detectionScore - 10);
         }
     }, 1000);
 
-    // ==========================================================
-    // 🧹 CLEAR DETECTION EVIDENCE
-    // ==========================================================
     function clearDetectionEvidence() {
         detectionScore = 0;
         incidentMap.clear();
@@ -267,7 +211,7 @@
     }
 
     // ==========================================================
-    // 🟢 REAL AD RENDER DETECTION (INSTANT OVERRIDE)
+    // 🟢 REAL AD RENDER DETECTION
     // ==========================================================
     function checkRealAdRender() {
         const ads = document.querySelectorAll("ins.adsbygoogle, .adsbygoogle");
@@ -310,9 +254,6 @@
         return rendered;
     }
 
-    // ==========================================================
-    // 🔓 UNLOCK PAGE
-    // ==========================================================
     function unlockPage() {
         const overlay = document.getElementById("ag-lock-overlay");
         if (overlay) overlay.remove();
@@ -335,9 +276,6 @@
         }
     }
 
-    // ==========================================================
-    // 🔒 CREATE BLOCK OVERLAY
-    // ==========================================================
     function createLockOverlay() {
         if (document.getElementById("ag-lock-overlay")) return;
 
@@ -420,9 +358,6 @@
         (document.body || document.documentElement).appendChild(overlay);
     }
 
-    // ==========================================================
-    // 🔒 SMART ARTICLE BLOCK
-    // ==========================================================
     function blockArticleIfNeeded() {
         if (articleBlockInProgress || articleCurrentlyReplaced) return;
 
@@ -446,9 +381,6 @@
         }
     }
 
-    // ==========================================================
-    // 🔓 SMART ARTICLE RESTORE
-    // ==========================================================
     function restoreArticleIfNeeded() {
         if (articleRestoreInProgress || !articleCurrentlyReplaced || !originalArticleCaptured) return;
 
@@ -466,33 +398,16 @@
     }
 
     // ==========================================================
-    // 🔒 PAGE LOCK
-    // ==========================================================
-    function lockPage() {
-        if (legitAdRendered) return;
-        if (performance.now() - pageLoadStart < ADSENSE_LOAD_GRACE) return;
-        if (checkRealAdRender()) return;
-
-        if (contentState !== "BLOCKED") {
-            blockArticleIfNeeded();
-        }
-
-        createLockOverlay();
-        pageLocked = true;
-        blockerState = "CONFIRMED";
-    }
-
-    // ==========================================================
     // 🧠 INTELLIGENT PROBE CONFIG
     // ==========================================================
     const PROBE_CONFIG = {
-        MAX_CYCLES: 3,
-        MIN_INTERVAL: 6500,
-        START_AFTER: 8500,
-        MAX_TOTAL_REQUESTS: 6,
+        MAX_CYCLES: 2,
+        MIN_INTERVAL: 8000,
+        START_AFTER: 10000,
+        MAX_TOTAL_REQUESTS: 4,
         FAILURE_CONFIRMATIONS: 2,
         TIMEOUT: 4500,
-        MAX_LIFETIME: 40000
+        MAX_LIFETIME: 30000
     };
 
     const probeState = {
@@ -518,28 +433,16 @@
         const elapsed = performance.now() - pageLoadStart;
         if (elapsed < PROBE_CONFIG.START_AFTER || elapsed > PROBE_CONFIG.MAX_LIFETIME) return false;
         if (probeState.cycles >= PROBE_CONFIG.MAX_CYCLES) return false;
-        if (probeState.pixelAttempts + probeState.fetchAttempts >= PROBE_CONFIG.MAX_TOTAL_REQUESTS) return false;
         if (performance.now() - probeState.lastProbeTime < PROBE_CONFIG.MIN_INTERVAL) return false;
 
         return true;
     }
 
     function updateProbeSuspicion() {
-        let suspicion = 0;
-        if (probeState.consecutivePixelFailures >= PROBE_CONFIG.FAILURE_CONFIRMATIONS) suspicion += 1;
-        if (probeState.consecutiveFetchFailures >= PROBE_CONFIG.FAILURE_CONFIRMATIONS) suspicion += 1;
-        if (probeState.consecutiveDualFailures >= 1) suspicion += 1;
-        if (probeState.pixelFailures >= 2 && probeState.fetchFailures >= 2) suspicion += 1;
-
-        const successes = probeState.pixelSuccesses + probeState.fetchSuccesses;
-        if (successes >= 2) suspicion = Math.max(0, suspicion - 1);
-
-        probeState.networkSuspicion = Math.min(4, suspicion);
-
-        if (probeState.networkSuspicion >= 2) {
+        if (probeState.consecutiveDualFailures >= 2) {
             categoryState.NETWORK = true;
             evidenceMap.NETWORK.add("intelligent_probe");
-            detectionScore += Math.min(15, probeState.networkSuspicion * 4);
+            detectionScore += 30;
         }
     }
 
@@ -580,7 +483,7 @@
                 resolve(false);
             };
 
-            const token = "ag22-" + probeState.pixelAttempts;
+            const token = "ag221-" + probeState.pixelAttempts;
             pixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?ag=" + encodeURIComponent(token);
         });
     }
@@ -601,7 +504,7 @@
         }
 
         try {
-            const token = "ag22-" + probeState.fetchAttempts;
+            const token = "ag221-" + probeState.fetchAttempts;
             const url = "https://pagead2.googlesyndication.com/pagead/img/0.gif?ag=" + encodeURIComponent(token);
             await window.fetch(url, {
                 method: "GET",
@@ -640,11 +543,6 @@
         }
 
         updateProbeSuspicion();
-
-        if (pixelOK || fetchOK) {
-            probeState.networkSuspicion = Math.max(0, probeState.networkSuspicion - 1);
-        }
-
         evaluate();
     }
 
@@ -653,37 +551,24 @@
     }
 
     // ==========================================================
-    // 🌐 GOOGLE ECOSYSTEM CORRELATION ENGINE (v2.2 CORE)
+    // 🌐 FIXED GOOGLE ECOSYSTEM CHECK
     // ==========================================================
     function checkGoogleEcosystem() {
         if (performance.now() - pageLoadStart < ADSENSE_LOAD_GRACE) return;
 
-        // 1. Check AdSense Script Readiness
+        // ONLY flag if adsbygoogle script fails to load AND network errors occur
         const adsenseScriptMissing = typeof window.adsbygoogle === "undefined";
-        googleEcosystem.adsenseBlocked = adsenseScriptMissing;
 
-        // 2. Check Google Analytics / Measurement
-        const gaMissing = typeof window.gtag === "undefined" && typeof window.ga === "undefined" && typeof window.dataLayer === "undefined";
-        googleEcosystem.analyticsBlocked = gaMissing;
-
-        // 3. Check Google Consent / Funding Choices Frame
-        const consentFrameMissing = !document.querySelector("iframe[src*='google'], iframe[id*='google'], .fc-consent-root");
-        googleEcosystem.consentBlocked = consentFrameMissing;
-
-        // Correlated Evidence Logic: High weight ONLY when multiple ecosystem elements are suppressed together
-        if (googleEcosystem.adsenseBlocked && (googleEcosystem.analyticsBlocked || googleEcosystem.consentBlocked)) {
+        if (adsenseScriptMissing && evidenceMap.RESOURCE.size > 0) {
             registerIncident(
-                "google:ecosystem:correlated_block",
+                "google:ecosystem:adsense_blocked",
                 "CRITICAL",
                 "GOOGLE_ECOSYSTEM",
-                "google_coordinated_blocking"
+                "google_adsense_blocked"
             );
         }
     }
 
-    // ==========================================================
-    // 📌 INCIDENT REGISTRATION
-    // ==========================================================
     function registerIncident(id, confidence, category, source) {
         if (!category) return;
 
@@ -702,14 +587,6 @@
             evidenceMap[category].add(source || id);
         }
 
-        // Additional correlated weight multipliers
-        if (evidenceMap.NETWORK.size > 0 && evidenceMap.DOM_COSMETIC.size > 0) {
-            detectionScore += 25;
-        }
-        if (evidenceMap.GOOGLE_ECOSYSTEM.size > 0 && evidenceMap.DOM_COSMETIC.size > 0) {
-            detectionScore += 30;
-        }
-
         setTimeout(evaluate, 300);
     }
 
@@ -720,16 +597,12 @@
         registerIncident("network:" + source, "MEDIUM", "NETWORK", source);
     }
 
-    // ==========================================================
-    // 🎯 CREATE AD BAITS
-    // ==========================================================
     function createBaits() {
         if (!document.body) return;
 
         const baitConfigs = [
             { id: "ag-ad-bait-1", classes: "adsbygoogle ad-banner ad-unit google-ad" },
-            { id: "ag-ad-bait-2", classes: "advertisement ad adsbox text-ad" },
-            { id: "ag-ad-bait-3", classes: "ad-container ad-placement ad-slot" }
+            { id: "ag-ad-bait-2", classes: "advertisement ad adsbox text-ad" }
         ];
 
         baitConfigs.forEach((config) => {
@@ -746,89 +619,33 @@
         });
     }
 
-    // ==========================================================
-    // 🎨 COSMETIC DETECTION
-    // ==========================================================
     function checkCosmetic() {
         createBaits();
 
-        const isAdScriptLoading = typeof window.adsbygoogle === "undefined";
-        if (isAdScriptLoading && performance.now() - pageLoadStart < ADSENSE_LOAD_GRACE) {
-            return;
-        }
+        if (performance.now() - pageLoadStart < ADSENSE_LOAD_GRACE) return;
 
-        const targets = document.querySelectorAll("[data-ag-bait], ins.adsbygoogle, .adsbygoogle");
+        const targets = document.querySelectorAll("[data-ag-bait]");
 
         targets.forEach((element) => {
-            if (element.dataset.agBait === "true") {
-                const style = window.getComputedStyle(element);
-                const suspicious = style.display === "none" || style.visibility === "hidden";
+            const style = window.getComputedStyle(element);
+            const suspicious = style.display === "none" || style.visibility === "hidden";
 
-                if (suspicious) {
-                    const hits = parseInt(element.dataset.hits || "0", 10) + 1;
-                    element.dataset.hits = String(hits);
+            if (suspicious) {
+                const hits = parseInt(element.dataset.hits || "0", 10) + 1;
+                element.dataset.hits = String(hits);
 
-                    if (hits >= 3) {
-                        registerIncident("bait:" + element.id, "STRONG", "DOM_COSMETIC", element.id);
-                    }
-                } else {
-                    element.dataset.hits = "0";
+                if (hits >= 4) {
+                    registerIncident("bait:" + element.id, "STRONG", "DOM_COSMETIC", element.id);
                 }
-                return;
-            }
-
-            if (element.matches("ins.adsbygoogle, .adsbygoogle")) {
-                const iframe = element.querySelector("iframe");
-                if (iframe) {
-                    const rect = iframe.getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) return;
-                }
-
-                if (element.getAttribute("data-ad-status") === "unfilled" || element.innerHTML.trim() === "") {
-                    return;
-                }
-
-                const style = window.getComputedStyle(element);
-                const hidden = style.display === "none" || style.visibility === "hidden";
-
-                if (hidden) {
-                    const hits = parseInt(element.dataset.hits || "0", 10) + 1;
-                    element.dataset.hits = String(hits);
-
-                    if (hits >= 4) {
-                        registerIncident("cosmetic:ad:" + (element.id || "anonymous"), "STRONG", "DOM_COSMETIC", "hidden_ad");
-                    }
-                } else {
-                    element.dataset.hits = "0";
-                }
+            } else {
+                element.dataset.hits = "0";
             }
         });
     }
 
-    // ==========================================================
-    // 🧠 BROWSER SIGNALS
-    // ==========================================================
-    function checkBrowserSignals() {
-        let score = 0;
-        if (browser.soul) score += 30;
-        if (window.soul || window.__soul_ext__ || (window.external && "Soul" in window.external)) score += 40;
-        if (browser.brave) score += 10;
-        if (browser.opera) score += 5;
-
-        if (score >= 60) {
-            registerIncident("browser:strong", "STRONG", "BROWSER_ENGINE", "browser_strong");
-        } else if (score >= 30) {
-            registerIncident("browser:weak", "WEAK", "BROWSER_ENGINE", "browser_weak");
-        }
-    }
-
-    // ==========================================================
-    // 🔍 AD STATE INSPECTION
-    // ==========================================================
     function inspectAdState() {
         const ads = document.querySelectorAll("ins.adsbygoogle, .adsbygoogle");
         let visibleAds = 0;
-        let usableAdSlot = false;
 
         ads.forEach((ad) => {
             const iframe = ad.querySelector("iframe");
@@ -844,15 +661,9 @@
                     style.opacity !== "0"
                 ) {
                     visibleAds++;
-                    usableAdSlot = true;
                     legitAdRendered = true;
                     lastAdRenderTime = performance.now();
-                    missingAdChecks = 0;
                 }
-            }
-
-            if (ad.getAttribute("data-ad-status") !== "unfilled") {
-                usableAdSlot = true;
             }
         });
 
@@ -863,18 +674,6 @@
             restoreArticleIfNeeded();
             unlockPage();
             stopIntelligentProbing();
-            return;
-        }
-
-        if (legitAdRendered && usableAdSlot) {
-            missingAdChecks++;
-            if (missingAdChecks >= AD_MISSING_CONFIRMATIONS) {
-                legitAdRendered = false;
-                missingAdChecks = 0;
-                blockerState = "MONITORING";
-                clearDetectionEvidence();
-                probeState.stopped = false;
-            }
         }
     }
 
@@ -888,8 +687,7 @@
             const target = event.target;
             const src = target?.src || target?.href || "";
 
-            if (/googlesyndication|pagead2|doubleclick|googleadservices|google-analytics/i.test(src)) {
-                googleEcosystem.resourceErrors++;
+            if (/googlesyndication|pagead2|doubleclick|googleadservices/i.test(src)) {
                 registerIncident("resource:error:" + src, "STRONG", "RESOURCE", "resource_error");
                 networkIncident("resource");
             }
@@ -897,108 +695,33 @@
         true
     );
 
-    (function installXHR() {
-        const originalOpen = XMLHttpRequest.prototype.open;
-        const originalSend = XMLHttpRequest.prototype.send;
-
-        XMLHttpRequest.prototype.open = function (method, url) {
-            this.__ag_url = typeof url === "string" ? url : "";
-            return originalOpen.apply(this, arguments);
-        };
-
-        XMLHttpRequest.prototype.send = function () {
-            this.addEventListener("error", () => {
-                const url = this.__ag_url || "";
-                if (/pagead2|googlesyndication|doubleclick|googleadservices|google-analytics/i.test(url)) {
-                    networkIncident("xhr");
-                    registerIncident("xhr:error:" + url, "STRONG", "RESOURCE", "xhr_error");
-                }
-            });
-            return originalSend.apply(this, arguments);
-        };
-    })();
-
-    (function installFetchInterceptor() {
-        if (!window.fetch) return;
-        const originalFetch = window.fetch;
-
-        window.fetch = function (...args) {
-            const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
-
-            return originalFetch.apply(this, args)
-                .then((response) => {
-                    if (!response.ok && response.type !== "opaque" && /pagead2|googlesyndication|doubleclick|googleadservices/i.test(url)) {
-                        networkIncident("fetch-status");
-                    }
-                    return response;
-                })
-                .catch((error) => {
-                    if (/pagead2|googlesyndication|doubleclick|googleadservices|google-analytics/i.test(url)) {
-                        networkIncident("fetch");
-                        registerIncident("fetch:error:" + url, "STRONG", "RESOURCE", "fetch_error");
-                    }
-                    throw error;
-                });
-        };
-    })();
-
     // ==========================================================
-    // 🗑️ REMOVED AD NODE DETECTION
+    // 🧠 STRICT DECISION ENGINE (ZERO FALSE POSITIVE RULE)
     // ==========================================================
-    function inspectRemovedNode(node) {
-        if (node.nodeType !== 1) return;
+    function detectBlockState() {
+        const categories = Object.values(categoryState).filter(Boolean).length;
 
-        const isAd =
-            node.classList?.contains("adsbygoogle") ||
-            node.matches?.("ins.adsbygoogle") ||
-            node.querySelector?.(".adsbygoogle, ins.adsbygoogle");
+        const network = evidenceMap.NETWORK.size > 0 || evidenceMap.RESOURCE.size > 0;
+        const cosmetic = evidenceMap.DOM_COSMETIC.size > 0;
+        const googleEco = evidenceMap.GOOGLE_ECOSYSTEM.size > 0;
 
-        if (isAd) {
-            registerIncident("removed:" + (node.id || node.className || "ad-node"), "STRONG", "REMOVAL", "ad_removal");
+        // CRITICAL RULE: Popup REQUIRES network/resource blocking AND cosmetic blocking simultaneously
+        const strictCoordinatedBlocking = (network || googleEco) && cosmetic;
+
+        if (detectionScore >= getThreshold() && categories >= 2 && strictCoordinatedBlocking) {
+            blockStateConfirmations++;
+        } else {
+            blockStateConfirmations = Math.max(0, blockStateConfirmations - 1);
         }
+
+        return blockStateConfirmations >= 3; // Requires 3 consecutive confirmations
     }
 
-    (function installDOMObserver() {
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                mutation.removedNodes.forEach(inspectRemovedNode);
-                mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType !== 1) return;
-                    const suspicious =
-                        node.matches?.(".adsbygoogle, ins.adsbygoogle, iframe") ||
-                        node.querySelector?.(".adsbygoogle, ins.adsbygoogle");
-
-                    if (suspicious) {
-                        setTimeout(() => {
-                            checkRealAdRender();
-                            inspectAdState();
-                            checkCosmetic();
-                            evaluate();
-                        }, 150);
-                    }
-                });
-            });
-        });
-
-        observer.observe(document.documentElement, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ["style", "class", "hidden", "src"]
-        });
-    })();
-
-    // ==========================================================
-    // 🧠 DECISION STATE CONFIRMATIONS (v2.2 DECISION ENGINE)
-    // ==========================================================
     function detectCleanState() {
-        if (checkRealAdRender()) {
-            cleanStateConfirmations = CLEAN_CONFIRMATIONS_REQUIRED;
-            return true;
-        }
+        if (checkRealAdRender()) return true;
 
         const probeSuccesses = probeState.pixelSuccesses + probeState.fetchSuccesses;
-        if (probeSuccesses >= 2 && probeState.networkSuspicion === 0) {
+        if (probeSuccesses >= 1) {
             cleanStateConfirmations++;
         } else {
             cleanStateConfirmations = Math.max(0, cleanStateConfirmations - 1);
@@ -1007,39 +730,9 @@
         return cleanStateConfirmations >= CLEAN_CONFIRMATIONS_REQUIRED;
     }
 
-    function detectBlockState() {
-        const categories = Object.values(categoryState).filter(Boolean).length;
-
-        const network = evidenceMap.NETWORK.size;
-        const cosmetic = evidenceMap.DOM_COSMETIC.size;
-        const resource = evidenceMap.RESOURCE.size;
-        const googleEco = evidenceMap.GOOGLE_ECOSYSTEM.size;
-
-        // Requiring coordinated ecosystem or cross-category validation before confirming block
-        const multiSignalValidation =
-            (googleEco > 0 && cosmetic > 0) ||
-            (network > 0 && cosmetic > 0) ||
-            (resource > 0 && cosmetic > 0 && categories >= 2);
-
-        if (detectionScore >= getThreshold() && categories >= 2 && multiSignalValidation) {
-            blockStateConfirmations++;
-        } else {
-            blockStateConfirmations = Math.max(0, blockStateConfirmations - 1);
-        }
-
-        // Must pass confirmation checks (no single weak signal)
-        return blockStateConfirmations >= 2;
-    }
-
-    // ==========================================================
-    // 🧠 MASTER DECISION EVALUATION
-    // ==========================================================
     function evaluate() {
         if (!navigator.onLine || document.readyState === "loading") return;
-
-        // Real Ad Render ALWAYS HAS HIGHEST PRIORITY
         if (checkRealAdRender()) return;
-
         if (!nowReady()) return;
 
         checkGoogleEcosystem();
@@ -1047,20 +740,13 @@
         if (articleCurrentlyReplaced || contentState === "BLOCKED") {
             if (detectCleanState()) {
                 blockerState = "CLEAN";
-                cleanStateConfirmations = 0;
-                blockStateConfirmations = 0;
-
                 restoreArticleIfNeeded();
                 unlockPage();
-                probeState.stopped = false;
-
                 clearDetectionEvidence();
                 return;
             }
-
             createLockOverlay();
             pageLocked = true;
-            blockerState = "CONFIRMED";
             return;
         }
 
@@ -1068,9 +754,6 @@
             if (checkRealAdRender()) return;
 
             blockerState = "CONFIRMED";
-            blockStateConfirmations = 0;
-            cleanStateConfirmations = 0;
-
             blockArticleIfNeeded();
             createLockOverlay();
             pageLocked = true;
@@ -1080,81 +763,24 @@
         blockerState = "MONITORING";
     }
 
-    // ==========================================================
-    // ⏱️ SCHEDULERS & WATCHERS
-    // ==========================================================
-    function scheduleDelayedVerification() {
-        delayedChecks.forEach((delay) => {
-            setTimeout(() => {
-                if (!navigator.onLine) return;
-                checkRealAdRender();
-                inspectAdState();
-                checkCosmetic();
-                checkBrowserSignals();
-                evaluate();
-            }, delay);
-        });
-    }
-
     function runLocalWatch() {
         if (!navigator.onLine || checkRealAdRender()) return;
         inspectAdState();
-
-        if (legitAdRendered && performance.now() - lastAdRenderTime < REBLOCK_GRACE) {
-            return;
-        }
-
         checkCosmetic();
-        checkBrowserSignals();
         evaluate();
     }
 
     async function runNetworkWatch() {
         if (!navigator.onLine || checkRealAdRender()) return;
-
-        if (legitAdRendered && performance.now() - lastAdRenderTime < REBLOCK_GRACE) {
-            return;
-        }
-
         await runIntelligentProbeCycle();
         evaluate();
     }
 
-    // ==========================================================
-    // 🔄 EVENT RECOVERIES
-    // ==========================================================
-    window.addEventListener("online", () => {
-        blockerState = "MONITORING";
-        probeState.stopped = false;
-        setTimeout(() => {
-            checkRealAdRender();
-            inspectAdState();
-            checkCosmetic();
-            evaluate();
-        }, 1200);
-    });
-
-    document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") {
-            setTimeout(() => {
-                checkRealAdRender();
-                inspectAdState();
-                checkCosmetic();
-                evaluate();
-            }, 700);
-        }
-    });
-
-    // ==========================================================
-    // 🚀 INITIALIZATION
-    // ==========================================================
     function init() {
         captureOriginalArticle();
 
         setTimeout(() => {
             runLocalWatch();
-            scheduleDelayedVerification();
-
             setInterval(runLocalWatch, LOCAL_WATCH_INTERVAL);
             setInterval(runNetworkWatch, NETWORK_WATCH_INTERVAL);
         }, 1000);
