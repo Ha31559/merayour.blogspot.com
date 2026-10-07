@@ -2,31 +2,22 @@
     "use strict";
 
     // ==========================================================
-    // MERAYOUR ADGUARD v2.4 - COMPLETE DECISION ENGINE
-    //
-    // - All Original Detection Layers Restored
-    // - Active Network Interception Fail-Safe Guard
-    // - Full Reversible Article Restore Engine
-    // - Zero False Positive Engine
+    // MERAYOUR ADGUARD v2.5 - ADAPTIVE GRACE ENGINE
     // ==========================================================
 
     if (window.__MERAYOUR_ADGUARD_ACTIVE__) return;
     window.__MERAYOUR_ADGUARD_ACTIVE__ = true;
 
-    // ==========================================================
-    // 1. BLOGGER PREVIEW / EDITOR BYPASS
-    // ==========================================================
+    // 1. BLOGGER PREVIEW BYPASS
     function isBloggerPreview() {
         const host = (location.hostname || "").toLowerCase();
         const href = (location.href || "").toLowerCase();
-        const search = (location.search || "").toLowerCase();
         const path = (location.pathname || "").toLowerCase();
         const ref = (document.referrer || "").toLowerCase();
 
         if (host === "blogger.com" || host.endsWith(".blogger.com") || host === "draft.blogger.com") return true;
         if (/(^|[\/_-])layout-preview([\/_-]|$)/i.test(path) || /(^|[\/_-])template-preview([\/_-]|$)/i.test(path) \vert{}\vert{} /(^\vert{}[\/_-])post-preview([\/_-]\vert{}$)/i.test(path)) return true;
-        if (search.includes("preview=true") || search.includes("preview=1") || search.includes("blogger.preview") || search.includes("editor=true")) return true;
-        if (href.includes("blogger.com") && (href.includes("/layout") || href.includes("/template") || href.includes("/edit"))) return true;
+        if (href.includes("preview=true") || href.includes("preview=1") || href.includes("blogger.preview") || href.includes("editor=true")) return true;
         if (window !== window.top && (ref.includes("blogger.com") || ref.includes("blogspot.com"))) return true;
 
         return false;
@@ -35,43 +26,28 @@
     if (isBloggerPreview()) return;
 
     // ==========================================================
-    // 2. CONFIGURATION & CORE STATE
+    // 2. CONFIGURATION & THRESHOLDS
     // ==========================================================
     const CONFIG = {
         logoUrl: "https://blogger.googleusercontent.com/img/a/AVvXsEhaZtN16Z4U9z--I9xFPXPpFPqQXh9Q4KbMSy3yElIrhilHz3K8p_yT_Vb-FLxWdgGuvMXdhnceynqtPxGx2690kGB33A-VQUY8lwKSd8tPKl5ZTG3sr_dk-57wVbk8PHki2zI8xI5KvOP3IPUCV7jqWvxznVHyArqw5cTA2FfJOZVYoB1k2AFFy5sDaQ=s666",
         title: "Ad Blocker Detected!",
-        message: "It looks like an ad or content blocker is preventing this page from loading properly. Merayour is a free website supported by readers and advertising. Please disable your ad blocker to continue reading normally."
+        message: "It looks like an ad or content blocker is preventing this page from loading properly. Merayour is supported by advertising. Please consider disabling your ad blocker to continue reading."
     };
 
+    // GRACE ENGINE TIMINGS (Milliseconds)
+    const ENGINE_GRACE_PERIOD = 10000; // 10 सेकंड का ग्रेस टाइम (धीमे नेटवर्क को हैंडल करने के लिए)
+    const SCORE_TRIGGER_THRESHOLD = 180; // इस लिमिट से ऊपर जाने पर ही संदिग्ध माना जाएगा
+    const MAX_CONFIRMATION_PASSES = 3;   // लगातार 3 बार पास होने पर ही पॉपअप आएगा
+
+    let suspicionScore = 0;
+    let confirmationPasses = 0;
     let legitAdRendered = false;
     let pageLocked = false;
-    let blockerState = "UNKNOWN";
     const pageLoadStart = performance.now();
 
-    const incidentMap = new Map();
-
-    const evidenceMap = {
-        NETWORK: new Set(),
-        DOM_COSMETIC: new Set(),
-        BROWSER_ENGINE: new Set(),
-        RESOURCE: new Set(),
-        REMOVAL: new Set(),
-        GOOGLE_ECOSYSTEM: new Set()
-    };
-
-    const categoryState = {
-        NETWORK: false,
-        DOM_COSMETIC: false,
-        BROWSER_ENGINE: false,
-        RESOURCE: false,
-        REMOVAL: false,
-        GOOGLE_ECOSYSTEM: false
-    };
-
-    // Article Lock & Restore Mechanics
+    // ARTICLE RENDER STATE
     let mainContent = null;
     let originalArticleHTML = null;
-    let originalArticleCaptured = false;
     let articleCurrentlyReplaced = false;
 
     function findMainContent() {
@@ -83,9 +59,8 @@
     function captureOriginalArticle() {
         const target = findMainContent();
         if (!target) return false;
-        if (!originalArticleCaptured) {
+        if (!originalArticleHTML) {
             originalArticleHTML = target.innerHTML;
-            originalArticleCaptured = true;
         }
         return true;
     }
@@ -96,16 +71,16 @@
         if (!target || !captureOriginalArticle()) return;
 
         target.innerHTML = `
-            <div class="ag-render-block" style="padding:40px 20px; text-align:center; color:#fff; background:#161b22; border-radius:12px; margin:20px 0;">
-                <h3 style="margin:0 0 10px; font-size:20px;">Content Temporarily Unavailable</h3>
-                <p style="margin:0; color:#8b949e; line-height:1.6; font-size:14px;">This page is supported by advertising. Please allow ads for Merayour to continue reading.</p>
+            <div style="padding:40px 20px; text-align:center; color:#fff; background:#161b22; border-radius:12px; margin:20px 0;">
+                <h3 style="margin:0 0 10px; font-size:20px;">Content Temporarily Locked</h3>
+                <p style="margin:0; color:#8b949e; line-height:1.6; font-size:14px;">Please disable your ad blocker to continue reading this post.</p>
             </div>
         `;
         articleCurrentlyReplaced = true;
     }
 
     function restoreArticleIfNeeded() {
-        if (!articleCurrentlyReplaced || !originalArticleCaptured) return;
+        if (!articleCurrentlyReplaced) return;
         const target = findMainContent();
         if (!target) return;
 
@@ -120,15 +95,8 @@
         if (lockStyle) lockStyle.remove();
 
         pageLocked = false;
-
-        if (document.documentElement) {
-            document.documentElement.style.removeProperty("overflow");
-            document.documentElement.style.removeProperty("user-select");
-        }
-        if (document.body) {
-            document.body.style.removeProperty("overflow");
-            document.body.style.removeProperty("user-select");
-        }
+        if (document.documentElement) document.documentElement.style.removeProperty("overflow");
+        if (document.body) document.body.style.removeProperty("overflow");
     }
 
     function createLockOverlay() {
@@ -146,7 +114,7 @@
                     display: flex; align-items: center; justify-content: center;
                     padding: 20px; box-sizing: border-box; font-family: system-ui, sans-serif; text-align: center;
                 }
-                .ag-card { width: 100%; max-width: 400px; padding: 32px 24px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,.5); }
+                .ag-card { width: 100%; max-width: 400px; padding: 32px 24px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; }
                 .ag-logo { max-width: 80px; margin-bottom: 16px; border-radius: 8px; }
             `;
             document.head.appendChild(style);
@@ -166,45 +134,10 @@
     }
 
     // ==========================================================
-    // 3. DETECTION LAYERS & MONITORS
+    // 3. PASSIVE MONITORING LAYERS
     // ==========================================================
 
-    // Incident Register
-    function registerIncident(id, category, source) {
-        if (!category) return;
-        categoryState[category] = true;
-        if (evidenceMap[category]) {
-            evidenceMap[category].add(source || id);
-        }
-    }
-
-    // A. Ad-Bait & Cosmetic Inspector
-    function checkCosmetic() {
-        if (!document.body) return;
-
-        const baitConfigs = [
-            { id: "ag-ad-bait-1", classes: "adsbygoogle ad-banner ad-unit google-ad" },
-            { id: "ag-ad-bait-2", classes: "advertisement ad adsbox text-ad" }
-        ];
-
-        baitConfigs.forEach((config) => {
-            let bait = document.getElementById(config.id);
-            if (!bait) {
-                bait = document.createElement("div");
-                bait.id = config.id;
-                bait.className = config.classes;
-                bait.style.cssText = "display:block!important;visibility:visible!important;width:1px!important;height:1px!important;position:absolute!important;left:-9999px!important;";
-                document.body.appendChild(bait);
-            }
-
-            const style = window.getComputedStyle(bait);
-            if (style.display === "none" || style.visibility === "hidden") {
-                registerIncident("bait:" + config.id, "DOM_COSMETIC", config.id);
-            }
-        });
-    }
-
-    // B. Real Ad Render Checking (HIGHEST PRIORITY OVERRIDE)
+    // REAL AD RENDER OVERRIDE (HIGHEST PRIORITY RESET)
     function checkRealAdRender() {
         const ads = document.querySelectorAll("ins.adsbygoogle, .adsbygoogle");
         let rendered = false;
@@ -223,6 +156,8 @@
 
         if (rendered) {
             legitAdRendered = true;
+            suspicionScore = 0;
+            confirmationPasses = 0;
             restoreArticleIfNeeded();
             unlockPage();
         }
@@ -230,117 +165,92 @@
         return rendered;
     }
 
-    // C. Resource & XHR / Fetch Error Listeners
-    window.addEventListener("error", function (event) {
-        const target = event?.target;
-        const src = target?.src || target?.href || "";
-        if (/googlesyndication|pagead2|doubleclick|googleadservices|google-analytics/i.test(src)) {
-            registerIncident("resource:error:" + src, "RESOURCE", "resource_error");
-        }
-    }, true);
-
-    (function installXHR() {
-        const originalOpen = XMLHttpRequest.prototype.open;
-        const originalSend = XMLHttpRequest.prototype.send;
-        XMLHttpRequest.prototype.open = function (method, url) {
-            this.__ag_url = typeof url === "string" ? url : "";
-            return originalOpen.apply(this, arguments);
-        };
-        XMLHttpRequest.prototype.send = function () {
-            this.addEventListener("error", () => {
-                if (/pagead2|googlesyndication|doubleclick|googleadservices|google-analytics/i.test(this.__ag_url)) {
-                    registerIncident("xhr:error:" + this.__ag_url, "RESOURCE", "xhr_error");
-                }
-            });
-            return originalSend.apply(this, arguments);
-        };
-    })();
-
-    // D. DOM Observer for Removed Ad Nodes
-    (function installDOMObserver() {
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                mutation.removedNodes.forEach((node) => {
-                    if (node.nodeType === 1 && (node.classList?.contains("adsbygoogle") || node.matches?.("ins.adsbygoogle"))) {
-                        registerIncident("removed:ad-node", "REMOVAL", "ad_removal");
-                    }
-                });
-            });
-        });
-        observer.observe(document.documentElement, { childList: true, subtree: true });
-    })();
-
-    // ==========================================================
-    // 4. ACTIVE NETWORK HARDWARE PROBE (FAIL-SAFE GUARD)
-    // ==========================================================
-    async function checkNetworkEndpoint(url) {
+    // NETWORK ENDPOINT ACTIVE TEST
+    async function testNetworkEndpoint(url) {
         try {
             await fetch(url, { method: "HEAD", mode: "no-cors", cache: "no-store" });
-            return true; // Request resolved -> Network Clear
-        } catch (err) {
-            return false; // Blocked at network level
+            return true; // Resolved -> Network Open
+        } catch (e) {
+            return false; // Blocked -> Network Filtering Active
         }
     }
 
+    // COSMETIC BAIT CHECK
+    function testCosmeticSuppression() {
+        const bait = document.createElement("div");
+        bait.className = "adsbygoogle ad-banner ad-unit advertisement";
+        bait.style.cssText = "width:1px!important;height:1px!important;position:absolute!important;left:-9999px!important;display:block!important;";
+        document.body.appendChild(bait);
+
+        const style = window.getComputedStyle(bait);
+        const isSuppressed = style.display === "none" || style.visibility === "hidden";
+        bait.remove();
+
+        return isSuppressed;
+    }
+
     // ==========================================================
-    // 5. MASTER DECISION ENGINE (CORRELATION & VERIFICATION)
+    // 4. GRACE DECISION ENGINE
     // ==========================================================
-    async function evaluateEngine() {
+    async function monitorActivity() {
         if (!navigator.onLine) return;
-        if (checkRealAdRender()) return; // Real Ad wins instantly
 
-        checkCosmetic();
+        // Rule 1: Real Ad always resets the engine
+        if (checkRealAdRender()) return;
 
-        // 1. Live Active Network Probing
+        // Rule 2: Grace Period Check (ग्रेस टाइम पूरा होने से पहले कोई एक्शन नहीं लिया जाएगा)
+        const elapsedTime = performance.now() - pageLoadStart;
+        if (elapsedTime < ENGINE_GRACE_PERIOD) {
+            return; // Data Gathering Phase
+        }
+
+        // Rule 3: Network & Cosmetic Signal Evaluation
         const adsenseUrl = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js";
-        const analyticsUrl = "https://www.google-analytics.com/analytics.js";
+        const isAdsenseScriptLoaded = typeof window.adsbygoogle !== "undefined";
+        const isNetworkPass = await testNetworkEndpoint(adsenseUrl);
+        const isCosmeticBlocked = testCosmeticSuppression();
 
-        const [adsenseOK, analyticsOK] = await Promise.all([
-            checkNetworkEndpoint(adsenseUrl),
-            checkNetworkEndpoint(analyticsUrl)
-        ]);
+        // Accumulative Score Calculation
+        let currentPassScore = 0;
 
-        const networkBlocked = !adsenseOK || !analyticsOK;
+        if (!isAdsenseScriptLoaded && !isNetworkPass) {
+            currentPassScore += 100; // Network Failure Evidence
+        }
+        if (isCosmeticBlocked) {
+            currentPassScore += 90;  // DOM Cosmetic Suppression Evidence
+        }
 
-        // 2. Category Correlation Check
-        const detectedCategories = Object.values(categoryState).filter(Boolean).length;
-        const cosmeticBlocked = evidenceMap.DOM_COSMETIC.size > 0;
+        suspicionScore = currentPassScore;
 
-        // HARD RULE: Network Request MUST Fail AND (DOM Cosmetic Block OR 2+ Evidence Categories)
-        if (networkBlocked && (cosmeticBlocked || detectedCategories >= 2)) {
-            // Confirmation Pass (1.5 seconds delay to prevent False Positive during network lag)
-            setTimeout(async () => {
-                const recheckAdsense = await checkNetworkEndpoint(adsenseUrl);
-                if (!recheckAdsense && !checkRealAdRender()) {
+        // Rule 4: Threshold & Confirmation Window
+        if (suspicionScore >= SCORE_TRIGGER_THRESHOLD) {
+            confirmationPasses++;
+
+            // लगातार 3 बार लिमिट क्रॉस होने पर ही लॉक ट्रिगर होगा
+            if (confirmationPasses >= MAX_CONFIRMATION_PASSES) {
+                if (!checkRealAdRender()) {
                     blockArticleIfNeeded();
                     createLockOverlay();
-                    blockerState = "CONFIRMED";
                 }
-            }, 1500);
+            }
         } else {
-            if (blockerState === "CONFIRMED" && (adsenseOK || checkRealAdRender())) {
+            // अगर स्थिति सामान्य होती है, तो कंफर्मेशन काउंट घटाएं
+            confirmationPasses = Math.max(0, confirmationPasses - 1);
+            if (confirmationPasses === 0 && pageLocked) {
                 restoreArticleIfNeeded();
                 unlockPage();
-                blockerState = "CLEAN";
             }
         }
     }
 
     // ==========================================================
-    // 6. EVENT RECOVERIES & INITIALIZATION
+    // 5. ENGINE STARTUP & EVENT LISTENERS
     // ==========================================================
-    window.addEventListener("online", () => setTimeout(evaluateEngine, 1000));
-    document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") setTimeout(evaluateEngine, 500);
-    });
-
     function init() {
         captureOriginalArticle();
-        // Grace period for normal assets to settle down
-        setTimeout(() => {
-            evaluateEngine();
-            setInterval(evaluateEngine, 8000);
-        }, 5000);
+
+        // बैकग्राउंड में हर 3 सेकंड पर साइलेंट मॉनिटरिंग चलेगी
+        setInterval(monitorActivity, 3000);
     }
 
     if (document.readyState === "loading") {
