@@ -35,9 +35,8 @@
     const evidenceMap = { NETWORK: new Set(), DOM_COSMETIC: new Set(), BROWSER_ENGINE: new Set(), RESOURCE: new Set(), REMOVAL: new Set() };
     const categoryState = { NETWORK: false, DOM_COSMETIC: false, BROWSER_ENGINE: false, RESOURCE: false, REMOVAL: false };
 
-    // ====== FIXED TIMING V2.2 ======
     const INITIAL_GRACE = 7000;
-    const ADSENSE_LOAD_GRACE = 20000; // Ab 20 sec tak wait karega
+    const ADSENSE_LOAD_GRACE = 25000; // 25 sec - final
     const INCIDENT_TTL = 4000;
     const INCIDENT_COOLDOWN = 1500;
     const LOCAL_WATCH_INTERVAL = 1500;
@@ -45,7 +44,7 @@
     const AD_MISSING_CONFIRMATIONS = 8;
     const REBLOCK_GRACE = 10000;
     const CLEAN_CONFIRMATIONS_REQUIRED = 2;
-    const delayedChecks = [7000, 12000, 18000, 22000];
+    const delayedChecks = [7000, 12000, 18000, 25000];
 
     let mainContent = null; let originalArticleHTML = null; let originalArticleCaptured = false; let articleCurrentlyReplaced = false; let contentState = "NORMAL"; let cleanStateConfirmations = 0; let blockStateConfirmations = 0; let articleRestoreInProgress = false; let articleBlockInProgress = false;
 
@@ -58,14 +57,26 @@
     const knownStandardBrowser = browser.chrome || browser.edge || browser.firefox || browser.safari;
 
     function getThreshold() {
-        // FIX 1: Threshold badhaya - ab false positive nahi hoga
-        let threshold = knownStandardBrowser? 180 : 150;
-        if (legitAdRendered) { threshold = 220; }
+        let threshold = knownStandardBrowser? 200 : 180;
+        if (legitAdRendered) { threshold = 250; }
         return threshold;
     }
 
     setInterval(() => { const now = performance.now(); incidentMap.forEach((timestamp, id) => { if (now - timestamp > INCIDENT_TTL) { incidentMap.delete(id); } }); if (detectionScore > 0) { detectionScore = Math.max(0, detectionScore - 5); } }, 1000);
     function clearDetectionEvidence() { detectionScore = 0; incidentMap.clear(); Object.keys(categoryState).forEach(key => { categoryState[key] = false; }); Object.keys(evidenceMap).forEach(key => { evidenceMap[key].clear(); }); }
+
+    // ===== NAYA GUARD: AdSense ne try kiya ya nahi =====
+    function isAdAttempted() {
+        const ads = document.querySelectorAll("ins.adsbygoogle");
+        if (ads.length === 0) return false;
+        // Kam se kam ek ad par data-ad-status aaya ho (filled / unfilled)
+        for (let i = 0; i < ads.length; i++) {
+            if (ads[i].getAttribute("data-ad-status")) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     function checkRealAdRender() {
         const ads = document.querySelectorAll("ins.adsbygoogle,.adsbygoogle"); let rendered = false;
@@ -84,15 +95,37 @@
     }
 
     function unlockPage() { const overlay = document.getElementById("ag-lock-overlay"); if (overlay) { overlay.remove(); } const lockStyle = document.getElementById("ag-lock-style"); if (lockStyle) { lockStyle.remove(); } pageLocked = false; if (document.documentElement) { document.documentElement.style.removeProperty("overflow"); document.documentElement.style.removeProperty("height"); document.documentElement.style.removeProperty("user-select"); } if (document.body) { document.body.style.removeProperty("overflow"); document.body.style.removeProperty("height"); document.body.style.removeProperty("user-select"); } }
-    function createLockOverlay() { if (document.getElementById("ag-lock-overlay")) { return; } let style = document.getElementById("ag-lock-style"); if (!style) { style = document.createElement("style"); style.id = "ag-lock-style"; style.textContent = `html, body { overflow: hidden!important; -webkit-user-select: none!important; -moz-user-select: none!important; -ms-user-select: none!important; user-select: none!important; } #ag-lock-overlay { position: fixed; inset: 0; width: 100vw; height: 100vh; background: #0d1117; color: #fff; z-index: 2147483647; display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-align: center; } #ag-lock-overlay.ag-card { width: 100%; max-width: 400px; padding: 32px 24px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,.5); box-sizing: border-box; } #ag-lock-overlay.ag-logo { max-width: 80px; max-height: 80px; margin-bottom: 16px; border-radius: 8px; object-fit: contain; } #ag-lock-overlay h1 { margin: 0 0 12px; font-size: 22px; color: #f0f6fc; font-weight: 600; } #ag-lock-overlay p { margin: 0; font-size: 14px; color: #8b949e; line-height: 1.6; }`; document.head.appendChild(style); } const overlay = document.createElement("div"); overlay.id = "ag-lock-overlay"; const logo = CONFIG.logoUrl? `<img src="${CONFIG.logoUrl}" alt="Merayour" class="ag-logo" onerror="this.style.display='none'">` : ""; overlay.innerHTML = `<div class="ag-card">${logo}<h1>${CONFIG.title}</h1><p>${CONFIG.message}</p></div>`; (document.body || document.documentElement).appendChild(overlay); }
+    function createLockOverlay() { if (document.getElementById("ag-lock-overlay")) { return; } let style = document.getElementById("ag-lock-style"); if (!style) { style = document.createElement("style"); style.id = "ag-lock-style"; style.textContent = `html, body { overflow: hidden!important; -webkit-user-select: none!important; } #ag-lock-overlay { position: fixed; inset: 0; width: 100vw; height: 100vh; background: #0d1117; color: #fff; z-index: 2147483647; display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; font-family: system-ui, sans-serif; text-align: center; } #ag-lock-overlay.ag-card { width: 100%; max-width: 400px; padding: 32px 24px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; } #ag-lock-overlay.ag-logo { max-width: 80px; max-height: 80px; margin-bottom: 16px; border-radius: 8px; } #ag-lock-overlay h1 { margin: 0 0 12px; font-size: 22px; color: #f0f6fc; } #ag-lock-overlay p { margin: 0; font-size: 14px; color: #8b949e; line-height: 1.6; }`; document.head.appendChild(style); } const overlay = document.createElement("div"); overlay.id = "ag-lock-overlay"; const logo = CONFIG.logoUrl? `<img src="${CONFIG.logoUrl}" alt="Merayour" class="ag-logo" onerror="this.style.display='none'">` : ""; overlay.innerHTML = `<div class="ag-card">${logo}<h1>${CONFIG.title}</h1><p>${CONFIG.message}</p></div>`; (document.body || document.documentElement).appendChild(overlay); }
     function blockArticleIfNeeded() { if (articleBlockInProgress) { return; } if (articleCurrentlyReplaced) { return; } const target = findMainContent(); if (!target) { return; } if (!captureOriginalArticle()) { return; } articleBlockInProgress = true; try { target.innerHTML = `<div class="ag-render-block" style="padding:30px;text-align:center;color:#fff;box-sizing:border-box;"><h3 style="margin:0 0 12px;font-size:20px;">Content Temporarily Unavailable</h3><p style="margin:0;color:#b8c0cc;line-height:1.6;font-size:14px;">This page is supported by advertising. Please allow ads for Merayour to continue reading.</p></div>`; articleCurrentlyReplaced = true; contentState = "BLOCKED"; } finally { articleBlockInProgress = false; } }
     function restoreArticleIfNeeded() { if (articleRestoreInProgress) { return; } if (!articleCurrentlyReplaced) { return; } if (!originalArticleCaptured) { return; } const target = findMainContent(); if (!target) { return; } articleRestoreInProgress = true; try { target.innerHTML = originalArticleHTML; articleCurrentlyReplaced = false; contentState = "NORMAL"; } finally { articleRestoreInProgress = false; } }
-    function lockPage() { if (legitAdRendered) { return; } if (performance.now() - pageLoadStart < ADSENSE_LOAD_GRACE) { return; } if (checkRealAdRender()) { return; } if (contentState!== "BLOCKED") { blockArticleIfNeeded(); } createLockOverlay(); pageLocked = true; blockerState = "CONFIRMED"; }
+    function lockPage() {
+        if (legitAdRendered) { return; }
+        if (performance.now() - pageLoadStart < ADSENSE_LOAD_GRACE) { return; }
+        if (!isAdAttempted()) { return; } // FINAL SAFETY: AdSense ne try hi nahi kiya toh lock nahi
+        if (checkRealAdRender()) { return; }
+        if (contentState!== "BLOCKED") { blockArticleIfNeeded(); }
+        createLockOverlay(); pageLocked = true; blockerState = "CONFIRMED";
+    }
 
-    const PROBE_CONFIG = { MAX_CYCLES: 3, MIN_INTERVAL: 10000, START_AFTER: 20000, MAX_TOTAL_REQUESTS: 6, FAILURE_CONFIRMATIONS: 2, TIMEOUT: 4500, MAX_LIFETIME: 50000 };
+    const PROBE_CONFIG = { MAX_CYCLES: 3, MIN_INTERVAL: 10000, START_AFTER: 25000, MAX_TOTAL_REQUESTS: 6, FAILURE_CONFIRMATIONS: 2, TIMEOUT: 4500, MAX_LIFETIME: 60000 };
     const probeState = { cycles: 0, pixelAttempts: 0, pixelSuccesses: 0, pixelFailures: 0, fetchAttempts: 0, fetchSuccesses: 0, fetchFailures: 0, consecutivePixelFailures: 0, consecutiveFetchFailures: 0, consecutiveDualFailures: 0, lastProbeTime: 0, stopped: false, networkSuspicion: 0 };
     function probeAllowed() { if (probeState.stopped) { return false; } if (legitAdRendered) { return false; } if (!navigator.onLine) { return false; } if (document.visibilityState === "hidden") { return false; } const elapsed = performance.now() - pageLoadStart; if (elapsed < PROBE_CONFIG.START_AFTER) { return false; } if (elapsed > PROBE_CONFIG.MAX_LIFETIME) { return false; } if (probeState.cycles >= PROBE_CONFIG.MAX_CYCLES) { return false; } if (probeState.pixelAttempts + probeState.fetchAttempts >= PROBE_CONFIG.MAX_TOTAL_REQUESTS) { return false; } if (performance.now() - probeState.lastProbeTime < PROBE_CONFIG.MIN_INTERVAL) { return false; } return true; }
-    function updateProbeSuspicion() { let suspicion = 0; if (probeState.consecutivePixelFailures >= PROBE_CONFIG.FAILURE_CONFIRMATIONS) { suspicion += 1; } if (probeState.consecutiveFetchFailures >= PROBE_CONFIG.FAILURE_CONFIRMATIONS) { suspicion += 1; } if (probeState.consecutiveDualFailures >= 1) { suspicion += 1; } if (probeState.pixelFailures >= 2 && probeState.fetchFailures >= 2) { suspicion += 1; } const successes = probeState.pixelSuccesses + probeState.fetchSuccesses; if (successes >= 2) { suspicion = Math.max(0, suspicion - 1); } probeState.networkSuspicion = Math.min(4, suspicion); if (probeState.networkSuspicion >= 2) { categoryState.NETWORK = true; evidenceMap.NETWORK.add("intelligent_probe"); detectionScore += Math.min(15, probeState.networkSuspicion * 4); } }
+    function updateProbeSuspicion() {
+        let suspicion = 0;
+        if (probeState.consecutivePixelFailures >= PROBE_CONFIG.FAILURE_CONFIRMATIONS) { suspicion += 1; }
+        if (probeState.consecutiveFetchFailures >= PROBE_CONFIG.FAILURE_CONFIRMATIONS) { suspicion += 1; }
+        if (probeState.consecutiveDualFailures >= 1) { suspicion += 1; }
+        if (probeState.pixelFailures >= 2 && probeState.fetchFailures >= 2) { suspicion += 1; }
+        const successes = probeState.pixelSuccesses + probeState.fetchSuccesses;
+        if (successes >= 2) { suspicion = Math.max(0, suspicion - 1); }
+        probeState.networkSuspicion = Math.min(4, suspicion);
+        // NOTE: Probe ab sirf info ke liye hai, score me add nahi hoga block ke liye
+        if (probeState.networkSuspicion >= 2) {
+            categoryState.NETWORK = true;
+            evidenceMap.NETWORK.add("intelligent_probe");
+            // detectionScore +=... HATA DIYA - yehi false positive ka reason tha
+        }
+    }
     function runPixelProbe() { return new Promise(resolve => { if (!navigator.onLine) { resolve(false); return; } if (probeState.pixelAttempts >= PROBE_CONFIG.MAX_CYCLES) { resolve(false); return; } probeState.pixelAttempts++; const pixel = new Image(); let settled = false; const timer = setTimeout(() => { if (settled) { return; } settled = true; probeState.pixelFailures++; probeState.consecutivePixelFailures++; pixel.src = ""; resolve(false); }, PROBE_CONFIG.TIMEOUT); pixel.onload = () => { if (settled) { return; } settled = true; clearTimeout(timer); probeState.pixelSuccesses++; probeState.consecutivePixelFailures = 0; resolve(true); }; pixel.onerror = () => { if (settled) { return; } settled = true; clearTimeout(timer); probeState.pixelFailures++; probeState.consecutivePixelFailures++; resolve(false); }; const token = "ag21-" + probeState.pixelAttempts; pixel.src = "https://pagead2.googlesyndication.com/pagead/img/0.gif?ag=" + encodeURIComponent(token); }); }
     async function runFetchProbe() { if (!navigator.onLine) { return false; } if (!window.fetch) { return false; } if (probeState.fetchAttempts >= PROBE_CONFIG.MAX_CYCLES) { return false; } probeState.fetchAttempts++; const controller = typeof AbortController!== "undefined"? new AbortController() : null; let timeoutId = null; if (controller) { timeoutId = setTimeout(() => { try { controller.abort(); } catch (_) {} }, PROBE_CONFIG.TIMEOUT); } try { const token = "ag21-" + probeState.fetchAttempts; const url = "https://pagead2.googlesyndication.com/pagead/img/0.gif?ag=" + encodeURIComponent(token); await window.fetch(url, { method: "GET", mode: "no-cors", cache: "no-store", credentials: "omit", signal: controller? controller.signal : undefined }); if (timeoutId) { clearTimeout(timeoutId); } probeState.fetchSuccesses++; probeState.consecutiveFetchFailures = 0; return true; } catch (error) { if (timeoutId) { clearTimeout(timeoutId); } probeState.fetchFailures++; probeState.consecutiveFetchFailures++; return false; } }
     async function runIntelligentProbeCycle() { if (!probeAllowed()) { return; } probeState.lastProbeTime = performance.now(); probeState.cycles++; const results = await Promise.all([runPixelProbe(), runFetchProbe()]); const pixelOK = results[0]; const fetchOK = results[1]; if (!pixelOK &&!fetchOK) { probeState.consecutiveDualFailures++; } else { probeState.consecutiveDualFailures = 0; } updateProbeSuspicion(); if (pixelOK || fetchOK) { probeState.networkSuspicion = Math.max(0, probeState.networkSuspicion - 1); } evaluate(); }
@@ -123,31 +156,25 @@
     function detectCleanState() { if (checkRealAdRender()) { cleanStateConfirmations = CLEAN_CONFIRMATIONS_REQUIRED; return true; } const probeSuccesses = probeState.pixelSuccesses + probeState.fetchSuccesses; if (probeSuccesses >= 2 && probeState.networkSuspicion === 0) { cleanStateConfirmations++; } else { cleanStateConfirmations = Math.max(0, cleanStateConfirmations - 1); } return (cleanStateConfirmations >= CLEAN_CONFIRMATIONS_REQUIRED); }
 
     function detectBlockState() {
-        // FIX 2: Ad slot check - agar page par ad hi nahi hai toh block mat karo
         const adSlots = document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
         if (adSlots.length === 0) { return false; }
-
-        // FIX 3: AdSense script hi load nahi hua toh wait karo, block mat karo
         if (typeof window.adsbygoogle === "undefined") { return false; }
+        if (!isAdAttempted()) { return false; } // AdSense ne abhi try hi nahi kiya
 
         const categories = Object.values(categoryState).filter(Boolean).length;
         const network = evidenceMap.NETWORK.size; const cosmetic = evidenceMap.DOM_COSMETIC.size;
         const resource = evidenceMap.RESOURCE.size; const removal = evidenceMap.REMOVAL.size;
-        const browserEvidence = evidenceMap.BROWSER_ENGINE.size;
-        const networkDom = network > 0 && cosmetic > 0;
-        const removalNetwork = network > 0 && removal > 0;
-        const resourceDom = resource > 0 && cosmetic > 0;
-        const multiSignal = network > 0 && cosmetic > 0 && (resource > 0 || removal > 0 || browserEvidence > 0);
-        const strongCombination = (networkDom || removalNetwork || resourceDom || multiSignal) && network > 0 && cosmetic > 0;
-        const probeSupport = probeState.networkSuspicion >= 2;
-        const validEvidence = strongCombination && (probeSupport || resource > 0 || removal > 0);
 
-        if (detectionScore >= getThreshold() && categories >= 3 && validEvidence) {
+        // FINAL FIX: Probe ko ignore karo, sirf real block signals dekho
+        const hasRealBlockSignal = (resource > 0 || removal > 0);
+
+        if (!hasRealBlockSignal) { return false; }
+
+        if (detectionScore >= getThreshold() && categories >= 2 && cosmetic > 0 && hasRealBlockSignal) {
             blockStateConfirmations++;
         } else {
             blockStateConfirmations = Math.max(0, blockStateConfirmations - 1);
         }
-        // FIX 4: Ab 2 baar confirm hone par hi block hoga
         return (blockStateConfirmations >= 2);
     }
 
