@@ -11,7 +11,7 @@
     const incidentMap=new Map();
     const evidenceMap={NETWORK:new Set(),DOM_COSMETIC:new Set(),BROWSER_ENGINE:new Set(),RESOURCE:new Set(),REMOVAL:new Set(),SCRIPT_BLOCK:new Set()};
     const categoryState={NETWORK:false,DOM_COSMETIC:false,BROWSER_ENGINE:false,RESOURCE:false,REMOVAL:false,SCRIPT_BLOCK:false};
-    const INITIAL_GRACE=7000,ADSENSE_LOAD_GRACE=25000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=1500,LOCAL_WATCH_INTERVAL=1500,NETWORK_WATCH_INTERVAL=12000,AD_MISSING_CONFIRMATIONS=8,REBLOCK_GRACE=10000,CLEAN_CONFIRMATIONS_REQUIRED=2;
+    const INITIAL_GRACE=7000,ADSENSE_LOAD_GRACE=15000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=1500,LOCAL_WATCH_INTERVAL=1500,NETWORK_WATCH_INTERVAL=12000,AD_MISSING_CONFIRMATIONS=8,REBLOCK_GRACE=10000,CLEAN_CONFIRMATIONS_REQUIRED=2;
     let mainContent=null,originalArticleHTML=null,originalArticleCaptured=false,articleCurrentlyReplaced=false,contentState="NORMAL",cleanStateConfirmations=0,blockStateConfirmations=0,articleRestoreInProgress=false,articleBlockInProgress=false;
     function findMainContent(){if(mainContent&&document.documentElement.contains(mainContent))return mainContent;mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");return mainContent;}
     function captureOriginalArticle(){const t=findMainContent();if(!t)return false;if(!originalArticleCaptured){originalArticleHTML=t.innerHTML;originalArticleCaptured=true;}return true;}
@@ -19,7 +19,7 @@
     const ua=(navigator.userAgent||"").toLowerCase(),vendor=(navigator.vendor||"").toLowerCase();
     const browser={soul:ua.includes("soul")||!!window.soul||!!window.__soul_ext__,brave:!!(navigator.brave&&typeof navigator.brave.isBrave==="function"),opera:ua.includes("opera")||ua.includes("opr/"),chrome:!!window.chrome&&vendor.includes("google"),edge:ua.includes("edg/"),【entity-firefox¦canonical_name=Firefox】:ua.includes("【entity-firefox¦canonical_name=Firefox】"),safari:/safari/.test(ua)&&!/chrome|crios|android/.test(ua),duckduckgo:ua.includes("duckduckgo")};
     function isAggressive(){return browser.brave||browser.opera||browser.【entity-firefox¦canonical_name=Firefox】||browser.edge||browser.duckduckgo||browser.soul;}
-    function getThreshold(){let t=isAggressive()?85:240;if(legitAdRendered)t=320;return t;}
+    function getThreshold(){let t=isAggressive()?50:240;if(legitAdRendered)t=320;return t;}
     setInterval(()=>{const n=performance.now();incidentMap.forEach((ts,id)=>{if(n-ts>INCIDENT_TTL)incidentMap.delete(id)});if(detectionScore>0)detectionScore=Math.max(0,detectionScore-5)},1000);
     function clearEvidence(){detectionScore=0;incidentMap.clear();Object.keys(categoryState).forEach(k=>categoryState[k]=false);Object.keys(evidenceMap).forEach(k=>evidenceMap[k].clear());}
     function isAdAttempted(){const ads=document.querySelectorAll("ins.adsbygoogle");if(ads.length===0)return false;if(typeof window.adsbygoogle==="undefined")return true;for(let i=0;i<ads.length;i++){if(ads[i].getAttribute("data-ad-status"))return true;}return true;}
@@ -60,8 +60,8 @@
         const cats=Object.values(categoryState).filter(Boolean).length;
         const hasSignal=evidenceMap.RESOURCE.size>0||evidenceMap.REMOVAL.size>0||evidenceMap.DOM_COSMETIC.size>0||evidenceMap.NETWORK.size>0||evidenceMap.SCRIPT_BLOCK.size>0;
         if(!hasSignal)return false;
-        const needCats=isAggressive()?1:2;
-        const needConf=isAggressive()?1:2;
+        const needCats=isAggressive()?0:1;
+        const needConf=isAggressive()?0:1;
         if(detectionScore>=getThreshold()&&cats>=needCats){blockStateConfirmations++;}else{blockStateConfirmations=Math.max(0,blockStateConfirmations-1);}
         return blockStateConfirmations>=needConf;
     }
