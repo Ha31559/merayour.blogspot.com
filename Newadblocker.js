@@ -11,7 +11,7 @@
     const incidentMap=new Map();
     const evidenceMap={NETWORK:new Set(),DOM_COSMETIC:new Set(),BROWSER_ENGINE:new Set(),RESOURCE:new Set(),REMOVAL:new Set(),SCRIPT_BLOCK:new Set(),DUCKDUCKGO:new Set()};
     const categoryState={NETWORK:false,DOM_COSMETIC:false,BROWSER_ENGINE:false,RESOURCE:false,REMOVAL:false,SCRIPT_BLOCK:false,DUCKDUCKGO:false};
-    const INITIAL_GRACE=3000,ADSENSE_LOAD_GRACE=9000,INCIDENT_TTL=3000,INCIDENT_COOLDOWN=1000,LOCAL_WATCH_INTERVAL=900,NETWORK_WATCH_INTERVAL=5000,AD_MISSING_CONFIRMATIONS=7,REBLOCK_GRACE=9000,CLEAN_CONFIRMATIONS_REQUIRED=1;
+    const INITIAL_GRACE=5000,ADSENSE_LOAD_GRACE=15000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=1500,LOCAL_WATCH_INTERVAL=1500,NETWORK_WATCH_INTERVAL=8000,AD_MISSING_CONFIRMATIONS=8,REBLOCK_GRACE=10000,CLEAN_CONFIRMATIONS_REQUIRED=2;
     let mainContent=null,originalArticleHTML=null,originalArticleCaptured=false,articleCurrentlyReplaced=false,contentState="NORMAL",cleanStateConfirmations=0,blockStateConfirmations=0,articleRestoreInProgress=false,articleBlockInProgress=false;
     function findMainContent(){if(mainContent&&document.documentElement.contains(mainContent))return mainContent;mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");return mainContent;}
     function captureOriginalArticle(){const t=findMainContent();if(!t)return false;if(!originalArticleCaptured){originalArticleHTML=t.innerHTML;originalArticleCaptured=true;}return true;}
@@ -20,7 +20,7 @@
     const browser={soul:uaLower.includes("soul")||!!window.soul||!!window.__soul_ext__,brave:!!(navigator.brave&&typeof navigator.brave.isBrave==="function"),opera:uaLower.includes("opera")||uaLower.includes("opr/"),chrome:!!window.chrome&&vendor.includes("google"),edge:uaLower.includes("edg/"),firefox:uaLower.includes("firefox"),safari:/safari/.test(uaLower)&&!/chrome|crios|android/.test(uaLower),duckduckgo:/DuckDuckGo/i.test(ua)};
     function isDuckDuckGoBrowser(){return /DuckDuckGo/i.test(ua);}
     function isAggressive(){return browser.brave||browser.opera||browser.firefox||browser.edge||browser.duckduckgo||browser.soul;}
-    function getThreshold(){let t=isAggressive()?45:100;if(legitAdRendered)t=320;return t;}
+    function getThreshold(){let t=isAggressive()?45:180;if(legitAdRendered)t=320;return t;}
     setInterval(()=>{const n=performance.now();incidentMap.forEach((ts,id)=>{if(n-ts>INCIDENT_TTL)incidentMap.delete(id)});if(detectionScore>0)detectionScore=Math.max(0,detectionScore-5)},1000);
     function clearEvidence(){detectionScore=0;incidentMap.clear();Object.keys(categoryState).forEach(k=>categoryState[k]=false);Object.keys(evidenceMap).forEach(k=>evidenceMap[k].clear());}
     function isAdAttempted(){const ads=document.querySelectorAll("ins.adsbygoogle");if(ads.length===0)return false;return true;}
