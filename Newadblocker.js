@@ -11,7 +11,7 @@
     const incidentMap=new Map();
     const evidenceMap={NETWORK:new Set(),DOM_COSMETIC:new Set(),BROWSER_ENGINE:new Set(),RESOURCE:new Set(),REMOVAL:new Set(),SCRIPT_BLOCK:new Set(),DUCKDUCKGO:new Set()};
     const categoryState={NETWORK:false,DOM_COSMETIC:false,BROWSER_ENGINE:false,RESOURCE:false,REMOVAL:false,SCRIPT_BLOCK:false,DUCKDUCKGO:false};
-    const INITIAL_GRACE=4000,ADSENSE_LOAD_GRACE=10000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=1200,LOCAL_WATCH_INTERVAL=1000,NETWORK_WATCH_INTERVAL=6000,AD_MISSING_CONFIRMATIONS=8,REBLOCK_GRACE=10000,CLEAN_CONFIRMATIONS_REQUIRED=2;
+    const INITIAL_GRACE=3000,ADSENSE_LOAD_GRACE=9000,INCIDENT_TTL=3000,INCIDENT_COOLDOWN=1000,LOCAL_WATCH_INTERVAL=900,NETWORK_WATCH_INTERVAL=5000,AD_MISSING_CONFIRMATIONS=7,REBLOCK_GRACE=9000,CLEAN_CONFIRMATIONS_REQUIRED=1;
     let mainContent=null,originalArticleHTML=null,originalArticleCaptured=false,articleCurrentlyReplaced=false,contentState="NORMAL",cleanStateConfirmations=0,blockStateConfirmations=0,articleRestoreInProgress=false,articleBlockInProgress=false;
     function findMainContent(){if(mainContent&&document.documentElement.contains(mainContent))return mainContent;mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");return mainContent;}
     function captureOriginalArticle(){const t=findMainContent();if(!t)return false;if(!originalArticleCaptured){originalArticleHTML=t.innerHTML;originalArticleCaptured=true;}return true;}
