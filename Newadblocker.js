@@ -90,35 +90,48 @@
    
     
     function detectBlockState(){
+
         const adSlots=document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
+
         if(adSlots.length===0)return false;
+
         if(legitAdRendered)return false;
+
         if(!nowReady())return false;
+
         if(checkRealAdRender())return false;
 
-        // 👇 बस ये 1 line जोड़ दो - Normal में AdSense ने जवाब दिया तो कभी popup नहीं
-        if(document.querySelector('ins.adsbygoogle[data-ad-status]')) return false;
-
         if(checkEdgeDuckForce()){blockStateConfirmations++;return true;}
+
         checkScriptBlock();
+
         checkCosmetic();
+
         checkBrowserSignals();
+
         const hasHollowIframe=(()=>{
+
             const iframes=document.querySelectorAll("ins.adsbygoogle iframe");
-            // 👇 बस ये 1 line बदलो - false की जगह SCRIPT_BLOCK कर दो
-            if(iframes.length===0)return categoryState.SCRIPT_BLOCK;
+
+            if(iframes.length===0)return false;
+
             for(const ifr of iframes){
+
                 try{
+
                     const doc=ifr.contentDocument;
+
                     if(!doc)continue;
+
                     if(doc.body.innerHTML.length<50)return true;
+
                 }catch(e){return false;}
+
             }
+
             return false;
-        })();
-        if(hasHollowIframe)return true;
-        if(detectionScore>=1)return true;
-        return false;
+
+
     
         
 }
