@@ -90,64 +90,40 @@
    
     
     function detectBlockState(){
-
         const adSlots=document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
-
         if(adSlots.length===0)return false;
-
         if(legitAdRendered)return false;
-
         if(!nowReady())return false;
-
         if(checkRealAdRender())return false;
-
+        if(document.querySelector('ins.adsbygoogle[data-ad-status]')) return false;
         if(checkEdgeDuckForce()){blockStateConfirmations++;return true;}
-
         checkScriptBlock();
-
         checkCosmetic();
-
         checkBrowserSignals();
-
         const hasHollowIframe=(()=>{
-
             const iframes=document.querySelectorAll("ins.adsbygoogle iframe");
-
-            if(iframes.length===0)return false;
-
+            if(iframes.length===0)return categoryState.SCRIPT_BLOCK;
             for(const ifr of iframes){
-
                 try{
-
                     const doc=ifr.contentDocument;
-
                     if(!doc)continue;
-
                     if(doc.body.innerHTML.length<50)return true;
-
                 }catch(e){return false;}
-
             }
-
             return false;
-
-
-    
-        
-}
-    })();
+        })();
         const trueCat = Object.values(categoryState).filter(v=>v===true).length;
-const hasStrong = categoryState.SCRIPT_BLOCK || categoryState.NETWORK || categoryState.RESOURCE;
-
-if(isEdgeOrDuck()){
-  if(hasHollowIframe) return true;
-  if(detectionScore>=1) return true;
-} else {
-  // Normal Chrome - यही तुम्हें चाहिए
-  if(trueCat>=2 && hasStrong) return true;
-}
+        const hasStrong = categoryState.SCRIPT_BLOCK || categoryState.NETWORK || categoryState.RESOURCE;
+        if(isEdgeOrDuck()){
+          if(hasHollowIframe) return true;
+          if(detectionScore>=1) return true;
+        } else {
+          if(categoryState.SCRIPT_BLOCK && hasHollowIframe) return true;
+          if(trueCat>=2 && hasStrong) return true;
+        }
         return false;
     }
+    
     function evaluate(){if(!navigator.onLine)return;if(document.readyState==="loading")return;if(checkRealAdRender())return;if(!nowReady())return;if(articleCurrentlyReplaced){if(checkRealAdRender()){restoreArticleIfNeeded();unlockPage();return;}createLockOverlay();return;}if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;return;}}
     function init(){captureOriginalArticle();setTimeout(()=>{evaluate();setInterval(evaluate,500);setInterval(runProbeCycle,2000);},500);}
     if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
