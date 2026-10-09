@@ -21,7 +21,7 @@
     const browser={soul:uaLower.includes("soul")||!!window.soul||!!window.__soul_ext__,brave:!!(navigator.brave&&typeof navigator.brave.isBrave==="function"),opera:uaLower.includes("opera")||uaLower.includes("opr/"),chrome:!!window.chrome&&vendor.includes("google"),edge:uaLower.includes("edg/"),firefox:uaLower.includes("firefox"),safari:/safari/.test(uaLower)&&!/chrome|crios|android/.test(uaLower),duckduckgo:/DuckDuckGo/i.test(ua)};
     function isEdgeOrDuck(){return /Edg\/|DuckDuckGo/i.test(ua);}
     function isAggressive(){return true;}
-    function getThreshold(){return 1;}
+    function getThreshold(){return 3;}
     setInterval(()=>{const n=performance.now();incidentMap.forEach((ts,id)=>{if(n-ts>INCIDENT_TTL)incidentMap.delete(id)});},1000);
     function clearEvidence(){detectionScore=0;incidentMap.clear();Object.keys(categoryState).forEach(k=>categoryState[k]=false);Object.keys(evidenceMap).forEach(k=>evidenceMap[k].clear());}
     function isAdAttempted(){const ads=document.querySelectorAll("ins.adsbygoogle");if(ads.length===0)return false;return true;}
@@ -110,7 +110,7 @@
             return false;
         })();
         if(hasHollowIframe)return true;
-        if(detectionScore>=1)return true;
+        if(detectionScore>=3)return true;
         return false;
     }
     function evaluate(){if(!navigator.onLine)return;if(document.readyState==="loading")return;if(checkRealAdRender())return;if(!nowReady())return;if(articleCurrentlyReplaced){if(checkRealAdRender()){restoreArticleIfNeeded();unlockPage();return;}createLockOverlay();return;}if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;return;}}
