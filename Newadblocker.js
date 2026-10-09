@@ -12,7 +12,7 @@
     const evidenceMap={NETWORK:new Set(),DOM_COSMETIC:new Set(),BROWSER_ENGINE:new Set(),RESOURCE:new Set(),REMOVAL:new Set(),SCRIPT_BLOCK:new Set(),DUCKDUCKGO:new Set(),DRILL:new Set()};
     const categoryState={NETWORK:false,DOM_COSMETIC:false,BROWSER_ENGINE:false,RESOURCE:false,REMOVAL:false,SCRIPT_BLOCK:false,DUCKDUCKGO:false,DRILL:false};
     // V8.1 FAST: 3 sec me snap
-    const INITIAL_GRACE=1000,ADSENSE_LOAD_GRACE=4000,INCIDENT_TTL=3000,INCIDENT_COOLDOWN=300,LOCAL_WATCH_INTERVAL=500,NETWORK_WATCH_INTERVAL=2000,AD_MISSING_CONFIRMATIONS=8,REBLOCK_GRACE=3000,CLEAN_CONFIRMATIONS_REQUIRED=1;
+    const INITIAL_GRACE=1000,ADSENSE_LOAD_GRACE=3000,INCIDENT_TTL=5000,INCIDENT_COOLDOWN=300,LOCAL_WATCH_INTERVAL=500,NETWORK_WATCH_INTERVAL=2000,AD_MISSING_CONFIRMATIONS=8,REBLOCK_GRACE=3000,CLEAN_CONFIRMATIONS_REQUIRED=1;
     let mainContent=null,originalArticleHTML=null,originalArticleCaptured=false,articleCurrentlyReplaced=false,contentState="NORMAL",cleanStateConfirmations=0,blockStateConfirmations=0,articleRestoreInProgress=false,articleBlockInProgress=false;
     function findMainContent(){if(mainContent&&document.documentElement.contains(mainContent))return mainContent;mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");return mainContent;}
     function captureOriginalArticle(){const t=findMainContent();if(!t)return false;if(!originalArticleCaptured){originalArticleHTML=t.innerHTML;originalArticleCaptured=true;}return true;}
@@ -87,22 +87,19 @@
     (function(){if(!window.fetch)return;const orig=window.fetch;window.fetch=function(...a){const url=typeof a[0]==="string"?a[0]:a[0]?.url||"";return orig.apply(this,a).catch(err=>{if(/pagead2|googlesyndication|doubleclick|googleadservices/i.test(url)){registerIncident("fetch:error:"+url,"STRONG","RESOURCE","fetch_error");}throw err;});};})();
     function inspectRemovedNode(n){if(n.nodeType!==1)return;const isAd=n.classList?.contains("adsbygoogle")||n.matches?.("ins.adsbygoogle")||n.querySelector?.(".adsbygoogle, ins.adsbygoogle");if(isAd)registerIncident("removed:"+(n.id||n.className||"ad-node"),"STRONG","REMOVAL","ad_removal");}
     (function(){const obs=new MutationObserver(muts=>{muts.forEach(m=>{m.removedNodes.forEach(inspectRemovedNode);});});obs.observe(document.documentElement,{childList:true,subtree:true});})();
-   
-    
     function detectBlockState(){
         const adSlots=document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
         if(adSlots.length===0)return false;
         if(legitAdRendered)return false;
         if(!nowReady())return false;
         if(checkRealAdRender())return false;
-        if(document.querySelector('ins.adsbygoogle[data-ad-status]')) return false;
         if(checkEdgeDuckForce()){blockStateConfirmations++;return true;}
         checkScriptBlock();
         checkCosmetic();
         checkBrowserSignals();
         const hasHollowIframe=(()=>{
             const iframes=document.querySelectorAll("ins.adsbygoogle iframe");
-            if(iframes.length===0)return categoryState.SCRIPT_BLOCK;
+            if(iframes.length===0)return true;
             for(const ifr of iframes){
                 try{
                     const doc=ifr.contentDocument;
@@ -112,18 +109,10 @@
             }
             return false;
         })();
-        const trueCat = Object.values(categoryState).filter(v=>v===true).length;
-        const hasStrong = categoryState.SCRIPT_BLOCK || categoryState.NETWORK || categoryState.RESOURCE;
-        if(isEdgeOrDuck()){
-          if(hasHollowIframe) return true;
-          if(detectionScore>=1) return true;
-        } else {
-          if(categoryState.SCRIPT_BLOCK && hasHollowIframe) return true;
-          if(trueCat>=2 && hasStrong) return true;
-        }
+        if(hasHollowIframe)return true;
+        if(detectionScore>=1)return true;
         return false;
     }
-    
     function evaluate(){if(!navigator.onLine)return;if(document.readyState==="loading")return;if(checkRealAdRender())return;if(!nowReady())return;if(articleCurrentlyReplaced){if(checkRealAdRender()){restoreArticleIfNeeded();unlockPage();return;}createLockOverlay();return;}if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;return;}}
     function init(){captureOriginalArticle();setTimeout(()=>{evaluate();setInterval(evaluate,500);setInterval(runProbeCycle,2000);},500);}
     if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
