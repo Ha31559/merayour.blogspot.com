@@ -12,7 +12,7 @@
     const evidenceMap={NETWORK:new Set(),DOM_COSMETIC:new Set(),BROWSER_ENGINE:new Set(),RESOURCE:new Set(),REMOVAL:new Set(),SCRIPT_BLOCK:new Set(),DUCKDUCKGO:new Set(),DRILL:new Set()};
     const categoryState={NETWORK:false,DOM_COSMETIC:false,BROWSER_ENGINE:false,RESOURCE:false,REMOVAL:false,SCRIPT_BLOCK:false,DUCKDUCKGO:false,DRILL:false};
     // V8.1 FAST: 3 sec me snap
-    const INITIAL_GRACE=1000,ADSENSE_LOAD_GRACE=3000,INCIDENT_TTL=5000,INCIDENT_COOLDOWN=500,LOCAL_WATCH_INTERVAL=400,NETWORK_WATCH_INTERVAL=1000,AD_MISSING_CONFIRMATIONS=8,REBLOCK_GRACE=2000,CLEAN_CONFIRMATIONS_REQUIRED=1;
+    const INITIAL_GRACE=1000,ADSENSE_LOAD_GRACE=3000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=500,LOCAL_WATCH_INTERVAL=300,NETWORK_WATCH_INTERVAL=1000,AD_MISSING_CONFIRMATIONS=8,REBLOCK_GRACE=2000,CLEAN_CONFIRMATIONS_REQUIRED=1;
     let mainContent=null,originalArticleHTML=null,originalArticleCaptured=false,articleCurrentlyReplaced=false,contentState="NORMAL",cleanStateConfirmations=0,blockStateConfirmations=0,articleRestoreInProgress=false,articleBlockInProgress=false;
     function findMainContent(){if(mainContent&&document.documentElement.contains(mainContent))return mainContent;mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");return mainContent;}
     function captureOriginalArticle(){const t=findMainContent();if(!t)return false;if(!originalArticleCaptured){originalArticleHTML=t.innerHTML;originalArticleCaptured=true;}return true;}
