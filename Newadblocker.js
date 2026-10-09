@@ -87,38 +87,52 @@
     (function(){if(!window.fetch)return;const orig=window.fetch;window.fetch=function(...a){const url=typeof a[0]==="string"?a[0]:a[0]?.url||"";return orig.apply(this,a).catch(err=>{if(/pagead2|googlesyndication|doubleclick|googleadservices/i.test(url)){registerIncident("fetch:error:"+url,"STRONG","RESOURCE","fetch_error");}throw err;});};})();
     function inspectRemovedNode(n){if(n.nodeType!==1)return;const isAd=n.classList?.contains("adsbygoogle")||n.matches?.("ins.adsbygoogle")||n.querySelector?.(".adsbygoogle, ins.adsbygoogle");if(isAd)registerIncident("removed:"+(n.id||n.className||"ad-node"),"STRONG","REMOVAL","ad_removal");}
     (function(){const obs=new MutationObserver(muts=>{muts.forEach(m=>{m.removedNodes.forEach(inspectRemovedNode);});});obs.observe(document.documentElement,{childList:true,subtree:true});})();
+   
+    
     function detectBlockState(){
     const adSlots=document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
     if(adSlots.length===0)return false;
     if(legitAdRendered)return false;
     if(!nowReady())return false;
     if(checkRealAdRender())return false;
+
+    // Normal में AdSense ने जवाब दिया तो safe
     if(document.querySelector('ins.adsbygoogle[data-ad-status]')) return false;
-    const anyIframe=document.querySelector('ins.adsbygoogle iframe');
-    if(anyIframe){
-        const r=anyIframe.getBoundingClientRect();
-        if(r.width>20 && r.height>20) return false;
-    }
+
     if(checkEdgeDuckForce()){blockStateConfirmations++;return true;}
     checkScriptBlock(); checkCosmetic(); checkBrowserSignals();
+
     const hasHollowIframe=(()=>{
         const iframes=document.querySelectorAll("ins.adsbygoogle iframe");
-        if(iframes.length===0)return false;
+        // AdBlocker में iframe बनता ही नहीं -> अगर script block है तो hollow मानो
+        if(iframes.length===0) return categoryState.SCRIPT_BLOCK;
         for(const ifr of iframes){
-            try{ const doc=ifr.contentDocument; if(!doc)continue; if(doc.body.innerHTML.length<50) return true; }catch(e){continue;}
+            try{
+                const doc=ifr.contentDocument;
+                if(!doc)continue;
+                if(doc.body.innerHTML.length<50) return true;
+            }catch(e){continue;}
         }
         return false;
     })();
+
     const trueCat=Object.values(categoryState).filter(v=>v===true).length;
     const hasStrong=categoryState.SCRIPT_BLOCK || categoryState.NETWORK || categoryState.RESOURCE;
+
     if(isEdgeOrDuck()){
         if(hasHollowIframe) return true;
         if(detectionScore>=1) return true;
     } else {
-        if(trueCat>=3 && hasStrong && hasHollowIframe) return true;
-        if(categoryState.SCRIPT_BLOCK && hasHollowIframe && categoryState.NETWORK) return true;
+        // Normal Chrome + uBlock: SCRIPT_BLOCK + hollow तो तुरंत popup
+        if(categoryState.SCRIPT_BLOCK && hasHollowIframe) return true;
+        if(categoryState.SCRIPT_BLOCK && trueCat>=2) return true;
+        if(trueCat>=2 && hasStrong) return true;
     }
     return false;
+    }
+
+
+        
 }
     })();
         const trueCat = Object.values(categoryState).filter(v=>v===true).length;
