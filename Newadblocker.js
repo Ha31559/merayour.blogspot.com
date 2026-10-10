@@ -111,7 +111,7 @@
             return false;
         })();
         if(hasHollowIframe)return true;
-        if(detectionScore>=2)return true;
+        if(detectionScore>=1)return true;
         return false;
     }
     function evaluate(){if(!navigator.onLine)return;if(document.readyState==="loading")return;if(checkRealAdRender())return;if(!nowReady())return;if(articleCurrentlyReplaced){if(checkRealAdRender()){restoreArticleIfNeeded();unlockPage();return;}createLockOverlay();return;}if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;return;}}
