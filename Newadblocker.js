@@ -52,8 +52,24 @@
         }
         return rendered;
     }
-    function unlockPage(){const o=document.getElementById("ag-lock-overlay");if(o)o.remove();const ls=document.getElementById("ag-lock-style");if(ls)ls.remove();pageLocked=false;if(document.documentElement){document.documentElement.style.removeProperty("overflow");document.documentElement.style.removeProperty("height");}if(document.body){document.body.style.removeProperty("overflow");document.body.style.removeProperty("height");}}
-    function createLockOverlay(){if(document.getElementById("ag-lock-overlay"))return;let st=document.getElementById("ag-lock-style");if(!st){st=document.createElement("style");st.id="ag-lock-style";st.textContent=`html,body{overflow:hidden!important} #ag-lock-overlay{position:fixed;inset:0;width:100vw;height:100vh;background:#0d1117;color:#fff;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;font-family:system-ui,sans-serif;text-align:center} #ag-lock-overlay.ag-card{width:100%;max-width:400px;padding:32px 24px;background:#161b22;border:1px solid #30363d;border-radius:12px}`;document.head.appendChild(st);}const ov=document.createElement("div");ov.id="ag-lock-overlay";const logo=CONFIG.logoUrl?`<img src="${CONFIG.logoUrl}" alt="Merayour" style="max-width:80px;margin-bottom:16px;border-radius:8px" onerror="this.style.display='none'">`:"";ov.innerHTML=`<div class="ag-card">${logo}<h1>${CONFIG.title}</h1><p>${CONFIG.message}</p></div>`;(document.body||document.documentElement).appendChild(ov);}
+    
+    function unlockPage(){const o=document.getElementById("ag-lock-overlay");if(o)o.remove();const o2=document.querySelector("[data-soul-lock]");if(o2)o2.remove();const ls=document.getElementById("ag-lock-style");if(ls)ls.remove();pageLocked=false;if(document.documentElement){document.documentElement.style.removeProperty("overflow");document.documentElement.style.removeProperty("height");}if(document.body){document.body.style.removeProperty("overflow");document.body.style.removeProperty("height");}}
+    function createLockOverlay(){
+        if(document.getElementById("ag-lock-overlay")||document.querySelector("[data-soul-lock]"))return;
+        const randomId = "ag-" + Math.random().toString(36).substr(2,9);
+        let st=document.getElementById("ag-lock-style");
+        if(!st){
+            st=document.createElement("style");
+            st.id="ag-lock-style";
+            st.textContent=`html,body{overflow:hidden!important} #${randomId}{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;background:#0d1117!important;color:#fff!important;z-index:2147483647!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:20px!important;box-sizing:border-box!important;font-family:system-ui,sans-serif!important;text-align:center!important} #${randomId} .ag-card{width:100%!important;max-width:400px!important;padding:32px 24px!important;background:#161b22!important;border:1px solid #30363d!important;border-radius:12px!important}`;
+            document.head.appendChild(st);
+        }
+        const ov=document.createElement("div");ov.id=randomId;ov.setAttribute("data-soul-lock","1");
+        const logo=CONFIG.logoUrl?`<img src="${CONFIG.logoUrl}" alt="Merayour" style="max-width:80px;margin-bottom:16px;border-radius:8px" onerror="this.style.display='none'">`:"";
+        ov.innerHTML=`<div class="ag-card">${logo}<h1>${CONFIG.title}</h1><p>${CONFIG.message}</p></div>`;
+        (document.body||document.documentElement).appendChild(ov);
+    }
+    
     // READER MODE BLOCK: pura article hata do
     function blockArticleIfNeeded(){
         if(articleBlockInProgress||articleCurrentlyReplaced)return;
