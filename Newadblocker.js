@@ -5,7 +5,7 @@
     function isBloggerPreview(){const h=(location.hostname||"").toLowerCase();const hr=(location.href||"").toLowerCase();const s=(location.search||"").toLowerCase();const p=(location.pathname||"").toLowerCase();const rf=(document.referrer||"").toLowerCase();if(h==="blogger.com"||h.endsWith(".blogger.com")||h==="draft.blogger.com")return true;if(/(^|[\/_-])layout-preview([\/_-]|$)/i.test(p)||/(^|[\/_-])template-preview([\/_-]|$)/i.test(p))return true;if(s.includes("preview=true")||s.includes("preview=1")||s.includes("blogger.preview"))return true;if(hr.includes("blogger.com")&&(hr.includes("/layout")||hr.includes("/template")||hr.includes("/edit")))return true;if(window!==window.top&&(rf.includes("blogger.com")||rf.includes("blogspot.com")))return true;return false;}
     if(isBloggerPreview())return;
     function isReaderMode(){try{const href=(location.href||"").toLowerCase();if(href.startsWith("about:reader")||href.includes("moz-reader")||location.protocol==="about:")return true;if(document.documentElement.classList.contains("moz-reader-mode")||document.body.classList.contains("aboutReader")||document.querySelector(".moz-reader-content"))return true;}catch(e){}return false;}
-    const CONFIG={logoUrl:"https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh6O5yJqzqS5Y5Y5Y5Y5Y5Y5/s666",title:"Ad Blocker Detected!",message:"It looks like an ad or content blocker is preventing this page from loading properly. Merayour is a free website supported by readers and advertising. Please allow ads or whitelist Merayour."};
+    const CONFIG={logoUrl:"https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh6O5yJqzqS5Y5Y5Y5Y5Y5/s666",title:"Ad Blocker Detected!",message:"It looks like an ad or content blocker is preventing this page from loading properly. Merayour is a free website supported by readers and advertising. Please allow ads or whitelist Merayour."};
     const WEIGHTS={CRITICAL:70,STRONG:40,MEDIUM:30,WEAK:10};
     let detectionScore=0,legitAdRendered=false,pageLocked=false,lastAdRenderTime=0,missingAdChecks=0;
     const pageLoadStart=performance.now();
@@ -15,7 +15,7 @@
     const INITIAL_GRACE=1000,ADSENSE_LOAD_GRACE=3000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=500;
     let mainContent=null,originalArticleHTML=null,originalArticleCaptured=false,articleCurrentlyReplaced=false,contentState="NORMAL",cleanStateConfirmations=0,blockStateConfirmations=0,articleRestoreInProgress=false,articleBlockInProgress=false;
     function findMainContent(){if(mainContent&&document.documentElement.contains(mainContent))return mainContent;mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");return mainContent;}
-    // ENCRYPTED LAYER v10
+    // ENCRYPTED LAYER v10.1 - FIXED
     function agEnc(s){try{return btoa(unescape(encodeURIComponent(s)));}catch(e){return btoa(s);}}
     function agDec(s){try{return decodeURIComponent(escape(atob(s)));}catch(e){try{return atob(s);}catch(_){return s;}}}
     function captureOriginalArticle(){
@@ -23,9 +23,8 @@
         if(!originalArticleCaptured){
             try{ originalArticleHTML=agEnc(t.innerHTML); }catch(e){ originalArticleHTML=t.innerHTML; }
             originalArticleCaptured=true;
+            // FIX: अब Loading तुरंत नहीं लगाएंगे, सिर्फ Flag लगाएंगे
             t.setAttribute("data-enc","1");
-            t.setAttribute("data-firefox-decoy","1");
-            t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2 style="color:#fff">Loading Content...</h2><p style="color:#8b949e">Please wait</p></div>`;
         }
         return true;
     }
@@ -45,7 +44,13 @@
             if(r.width<10||r.height<10||st.display==="none"||st.visibility==="hidden")return;
             try{const doc=ifr.contentDocument||ifr.contentWindow?.document;if(!doc)return;if((doc.body?.innerHTML||"").length>100)rendered=true;}catch(e){if(ifr.src&&ifr.src!=="about:blank")rendered=true;}
         });
-        if(rendered){legitAdRendered=true;lastAdRenderTime=performance.now();missingAdChecks=0;if(cleanStateConfirmations<10)cleanStateConfirmations++;if(cleanStateConfirmations>=10){clearEvidence();blockStateConfirmations=0;restoreArticleIfNeeded();unlockPage();}}else{if(legitAdRendered){missingAdChecks++;if(missingAdChecks>=4){legitAdRendered=false;cleanStateConfirmations=0;}}else{cleanStateConfirmations=0;}}
+        if(rendered){
+            legitAdRendered=true;lastAdRenderTime=performance.now();missingAdChecks=0;
+            if(cleanStateConfirmations<10)cleanStateConfirmations++;
+            if(cleanStateConfirmations>=10){clearEvidence();blockStateConfirmations=0;restoreArticleIfNeeded();unlockPage();}
+        }else{
+            if(legitAdRendered){missingAdChecks++;if(missingAdChecks>=4){legitAdRendered=false;cleanStateConfirmations=0;}}else{cleanStateConfirmations=0;}
+        }
         return rendered;
     }
     function unlockPage(){if(isReaderMode())return;const o=document.getElementById("ag-lock-overlay");if(o)o.remove();const o2=document.querySelector("[data-soul-lock]");if(o2)o2.remove();const ls=document.getElementById("ag-lock-style");if(ls)ls.remove();pageLocked=false;if(document.documentElement)document.documentElement.style.removeProperty("overflow");if(document.body)document.body.style.removeProperty("overflow");}
@@ -56,20 +61,37 @@
         if(!st){st=document.createElement("style");st.id="ag-lock-style";st.textContent=`html,body{overflow:hidden!important} #${randomId}{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;background:#0d1117!important;color:#fff!important;z-index:2147483647!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:20px!important} #${randomId}.ag-card{max-width:400px!important;padding:32px 24px!important;background:#161b22!important;border:1px solid #30363d!important;border-radius:12px!important}`;document.head.appendChild(st);}
         const ov=document.createElement("div");ov.id=randomId;ov.setAttribute("data-soul-lock","1");ov.innerHTML=`<div class="ag-card"><h1>${CONFIG.title}</h1><p>${CONFIG.message}</p></div>`;(document.body||document.documentElement).appendChild(ov);
     }
-    function blockArticleIfNeeded(){if(articleBlockInProgress)return;const t=findMainContent();if(!t||!captureOriginalArticle())return;const isDecoy=t.hasAttribute("data-firefox-decoy")||t.hasAttribute("data-enc");if(articleCurrentlyReplaced&&!isDecoy)return;articleBlockInProgress=true;try{t.removeAttribute("data-firefox-decoy");t.setAttribute("data-ag-original","1");t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2>Content Locked</h2><p style="color:#8b949e">Please allow ads to read this article</p></div>`;t.style.setProperty("display","block","important");articleCurrentlyReplaced=true;contentState="BLOCKED";}finally{articleBlockInProgress=false;}}
+    function blockArticleIfNeeded(){
+        if(articleBlockInProgress)return;
+        const t=findMainContent();if(!t||!captureOriginalArticle())return;
+        if(articleCurrentlyReplaced)return;
+        articleBlockInProgress=true;
+        try{
+            t.setAttribute("data-ag-original","1");
+            t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2>Content Locked</h2><p style="color:#8b949e">Please allow ads to read this article</p></div>`;
+            t.style.setProperty("display","block","important");
+            articleCurrentlyReplaced=true;contentState="BLOCKED";
+        }finally{articleBlockInProgress=false;}
+    }
     function restoreArticleIfNeeded(){
         if(isReaderMode())return;
-        if(!legitAdRendered) return;
-        if(articleRestoreInProgress||!originalArticleCaptured)return;
-        const t=findMainContent();if(!t)return;
-        if(!articleCurrentlyReplaced &&!t.hasAttribute("data-enc") &&!t.hasAttribute("data-firefox-decoy")) return;
-        articleRestoreInProgress=true;
-        try{
-            const dec = agDec(originalArticleHTML);
-            if(dec && dec.length>50){ t.innerHTML=dec; }
-            t.removeAttribute("data-enc");t.removeAttribute("data-firefox-decoy");
-            articleCurrentlyReplaced=false;contentState="NORMAL";
-        }finally{articleRestoreInProgress=false;}
+        const t=findMainContent();if(!t||!originalArticleCaptured)return;
+        if(articleRestoreInProgress)return;
+        // अगर Ad Render हुआ तो ही Decrypt
+        if(!legitAdRendered &&!t.hasAttribute("data-enc")) return;
+        // Firefox decoy हटाओ
+        if(articleCurrentlyReplaced || t.hasAttribute("data-enc") || t.hasAttribute("data-firefox-decoy")){
+            articleRestoreInProgress=true;
+            try{
+                // अगर Encrypted है तो Decrypt करो, नहीं तो Original दिखाओ
+                if(originalArticleHTML && originalArticleHTML.length>100){
+                    const dec=agDec(originalArticleHTML);
+                    if(dec && dec.length>100) t.innerHTML=dec;
+                }
+                t.removeAttribute("data-enc");t.removeAttribute("data-firefox-decoy");
+                articleCurrentlyReplaced=false;contentState="NORMAL";
+            }finally{articleRestoreInProgress=false;}
+        }
     }
     const PROBE_CONFIG={MAX_CYCLES:3,MIN_INTERVAL:1500,START_AFTER:2000,MAX_TOTAL_REQUESTS:10,TIMEOUT:2500,MAX_LIFETIME:60000};
     const probeState={cycles:0,pixelAttempts:0,pixelFailures:0,fetchAttempts:0,fetchFailures:0,consecutivePixelFailures:0,consecutiveFetchFailures:0,consecutiveDualFailures:0,lastProbeTime:0,stopped:false,networkSuspicion:0};
@@ -111,11 +133,36 @@
                 blockArticleIfNeeded();createLockOverlay();pageLocked=true;return;
             }
         }
-        if(!navigator.onLine||document.readyState==="loading")return;checkRealAdRender();if(!nowReady())return;
+        if(!navigator.onLine||document.readyState==="loading")return;
+        // FIX: Ad OFF है तो अब Content तुरंत दिखाओ, Loading हटाओ
+        if(checkRealAdRender()){
+            if(originalArticleHTML){ restoreArticleIfNeeded(); }
+            if(cleanStateConfirmations>=10){ unlockPage(); return; }
+        }
+        if(!nowReady())return;
         if(legitAdRendered&&cleanStateConfirmations>=10)return;
-        if(articleCurrentlyReplaced){if(legitAdRendered&&cleanStateConfirmations>=10){restoreArticleIfNeeded();unlockPage();return;}createLockOverlay();return;}
+        if(articleCurrentlyReplaced){
+            if(legitAdRendered&&cleanStateConfirmations>=10){restoreArticleIfNeeded();unlockPage();return;}
+            createLockOverlay();return;
+        }
         if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;}
+        else {
+            // कोई Block नहीं तो Encrypted हो तो भी Restore करो
+            if(originalArticleHTML) restoreArticleIfNeeded();
+        }
     }
-    function init(){captureOriginalArticle();setTimeout(()=>{evaluate();setInterval(evaluate,500);setInterval(runProbeCycle,2000);},300);}
+    function init(){
+        captureOriginalArticle();
+        // Firefox में सिर्फ 1 Sec Loading दिखाओ, फिर Auto Restore
+        if(navigator.userAgent.toLowerCase().includes("firefox")){
+            const t=findMainContent();
+            if(t){
+                const old=t.innerHTML;
+                t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2 style="color:#fff">Loading Content...</h2><p style="color:#8b949e">Please wait</p></div>`;
+                setTimeout(()=>{ if(!articleCurrentlyReplaced &&!legitAdRendered){ restoreArticleIfNeeded(); } },1200);
+            }
+        }
+        setTimeout(()=>{evaluate();setInterval(evaluate,500);setInterval(runProbeCycle,2000);},300);
+    }
     if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
 })();
