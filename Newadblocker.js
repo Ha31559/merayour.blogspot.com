@@ -88,8 +88,17 @@
     function inspectRemovedNode(n){if(n.nodeType!==1)return;const isAd=n.classList?.contains("adsbygoogle")||n.matches?.("ins.adsbygoogle")||n.querySelector?.(".adsbygoogle, ins.adsbygoogle");if(isAd)registerIncident("removed:"+(n.id||n.className||"ad-node"),"STRONG","REMOVAL","ad_removal");}
     (function(){const obs=new MutationObserver(muts=>{muts.forEach(m=>{m.removedNodes.forEach(inspectRemovedNode);});});obs.observe(document.documentElement,{childList:true,subtree:true});})();
     function detectBlockState(){
+        const isSoul = browser.soul || window.soul || !!window.__soul_ext__;
+        if(isSoul){
+            if(legitAdRendered) return false;
+            if(document.querySelector('ins.adsbygoogle[data-ad-status]')) return false;
+            if((performance.now()-pageLoadStart)>=1500) return true;
+        }
         const adSlots=document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
-        if(adSlots.length===0)return false;
+        if(adSlots.length===0){
+            if(isSoul || detectionScore>=1) return true;
+            return false;
+        }
         if(legitAdRendered)return false;
         if(!nowReady())return false;
         if(checkRealAdRender())return false;
