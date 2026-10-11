@@ -13,7 +13,7 @@
     const evidenceMap={NETWORK:new Set(),DOM_COSMETIC:new Set(),BROWSER_ENGINE:new Set(),RESOURCE:new Set(),REMOVAL:new Set(),SCRIPT_BLOCK:new Set(),DUCKDUCKGO:new Set(),DRILL:new Set()};
     const categoryState={NETWORK:false,DOM_COSMETIC:false,BROWSER_ENGINE:false,RESOURCE:false,REMOVAL:false,SCRIPT_BLOCK:false,DUCKDUCKGO:false,DRILL:false};
     // FIX 1: False Popup रोकने के लिए Grace बढ़ाया
-    const INITIAL_GRACE=2000,ADSENSE_LOAD_GRACE=4000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=500;
+    const INITIAL_GRACE=3000,ADSENSE_LOAD_GRACE=5000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=500;
     let mainContent=null,originalArticleHTML=null,originalArticleCaptured=false,articleCurrentlyReplaced=false,contentState="NORMAL",cleanStateConfirmations=0,blockStateConfirmations=0,articleRestoreInProgress=false,articleBlockInProgress=false;
     function findMainContent(){if(mainContent&&document.documentElement.contains(mainContent))return mainContent;mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");return mainContent;}
     function agEnc(s){try{return btoa(unescape(encodeURIComponent(s)));}catch(e){return btoa(s);}}
@@ -148,7 +148,7 @@
         checkScriptBlock();checkCosmetic();checkBrowserSignals();
         const hasHollow=(()=>{const ifr=document.querySelectorAll("ins.adsbygoogle iframe");if(ifr.length===0)return categoryState.SCRIPT_BLOCK;for(const i of ifr){try{if(i.contentDocument&&i.contentDocument.body.innerHTML.length<50)return true;}catch(e){return false;}}return false;})();
         if(hasHollow)return true;
-        if(detectionScore>=40)return true;
+        if(detectionScore>=80)return true;
         return false;
     }
     function evaluate(){
