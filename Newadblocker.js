@@ -15,7 +15,6 @@
     const INITIAL_GRACE=1000,ADSENSE_LOAD_GRACE=3000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=500;
     let mainContent=null,originalArticleHTML=null,originalArticleCaptured=false,articleCurrentlyReplaced=false,contentState="NORMAL",cleanStateConfirmations=0,blockStateConfirmations=0,articleRestoreInProgress=false,articleBlockInProgress=false;
     function findMainContent(){if(mainContent&&document.documentElement.contains(mainContent))return mainContent;mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");return mainContent;}
-    // ENCRYPTED LAYER v10.1 - FIXED
     function agEnc(s){try{return btoa(unescape(encodeURIComponent(s)));}catch(e){return btoa(s);}}
     function agDec(s){try{return decodeURIComponent(escape(atob(s)));}catch(e){try{return atob(s);}catch(_){return s;}}}
     function captureOriginalArticle(){
@@ -23,7 +22,6 @@
         if(!originalArticleCaptured){
             try{ originalArticleHTML=agEnc(t.innerHTML); }catch(e){ originalArticleHTML=t.innerHTML; }
             originalArticleCaptured=true;
-            // FIX: अब Loading तुरंत नहीं लगाएंगे, सिर्फ Flag लगाएंगे
             t.setAttribute("data-enc","1");
         }
         return true;
@@ -64,11 +62,16 @@
     function blockArticleIfNeeded(){
         if(articleBlockInProgress)return;
         const t=findMainContent();if(!t||!captureOriginalArticle())return;
-        if(articleCurrentlyReplaced)return;
+        if(articleCurrentlyReplaced &&!browser.firefox) return;
         articleBlockInProgress=true;
         try{
             t.setAttribute("data-ag-original","1");
-            t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2>Content Locked</h2><p style="color:#8b949e">Please allow ads to read this article</p></div>`;
+            // FIREFOX FIX: AdBlock ON पर सिर्फ Loading दिखाओ
+            if(browser.firefox){
+                t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2 style="color:#fff">Loading Content...</h2><p style="color:#8b949e">Please wait</p></div>`;
+            } else {
+                t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2>Content Locked</h2><p style="color:#8b949e">Please allow ads to read this article</p></div>`;
+            }
             t.style.setProperty("display","block","important");
             articleCurrentlyReplaced=true;contentState="BLOCKED";
         }finally{articleBlockInProgress=false;}
@@ -77,21 +80,17 @@
         if(isReaderMode())return;
         const t=findMainContent();if(!t||!originalArticleCaptured)return;
         if(articleRestoreInProgress)return;
-        // अगर Ad Render हुआ तो ही Decrypt
-        if(!legitAdRendered &&!t.hasAttribute("data-enc")) return;
-        // Firefox decoy हटाओ
-        if(articleCurrentlyReplaced || t.hasAttribute("data-enc") || t.hasAttribute("data-firefox-decoy")){
-            articleRestoreInProgress=true;
-            try{
-                // अगर Encrypted है तो Decrypt करो, नहीं तो Original दिखाओ
-                if(originalArticleHTML && originalArticleHTML.length>100){
-                    const dec=agDec(originalArticleHTML);
-                    if(dec && dec.length>100) t.innerHTML=dec;
-                }
-                t.removeAttribute("data-enc");t.removeAttribute("data-firefox-decoy");
-                articleCurrentlyReplaced=false;contentState="NORMAL";
-            }finally{articleRestoreInProgress=false;}
-        }
+        // FIX: Firefox में Loading लगा है तो भी Restore करो जब Ad ON हो
+        if(!articleCurrentlyReplaced &&!t.hasAttribute("data-enc")) return;
+        articleRestoreInProgress=true;
+        try{
+            if(originalArticleHTML && originalArticleHTML.length>50){
+                const dec=agDec(originalArticleHTML);
+                if(dec && dec.length>50) t.innerHTML=dec;
+            }
+            t.removeAttribute("data-enc");t.removeAttribute("data-firefox-decoy");
+            articleCurrentlyReplaced=false;contentState="NORMAL";
+        }finally{articleRestoreInProgress=false;}
     }
     const PROBE_CONFIG={MAX_CYCLES:3,MIN_INTERVAL:1500,START_AFTER:2000,MAX_TOTAL_REQUESTS:10,TIMEOUT:2500,MAX_LIFETIME:60000};
     const probeState={cycles:0,pixelAttempts:0,pixelFailures:0,fetchAttempts:0,fetchFailures:0,consecutivePixelFailures:0,consecutiveFetchFailures:0,consecutiveDualFailures:0,lastProbeTime:0,stopped:false,networkSuspicion:0};
@@ -134,34 +133,24 @@
             }
         }
         if(!navigator.onLine||document.readyState==="loading")return;
-        // FIX: Ad OFF है तो अब Content तुरंत दिखाओ, Loading हटाओ
         if(checkRealAdRender()){
-            if(originalArticleHTML){ restoreArticleIfNeeded(); }
+            if(cleanStateConfirmations>=1){ restoreArticleIfNeeded(); }
             if(cleanStateConfirmations>=10){ unlockPage(); return; }
         }
         if(!nowReady())return;
         if(legitAdRendered&&cleanStateConfirmations>=10)return;
         if(articleCurrentlyReplaced){
-            if(legitAdRendered&&cleanStateConfirmations>=10){restoreArticleIfNeeded();unlockPage();return;}
+            if(legitAdRendered){restoreArticleIfNeeded();unlockPage();return;}
             createLockOverlay();return;
         }
         if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;}
         else {
-            // कोई Block नहीं तो Encrypted हो तो भी Restore करो
             if(originalArticleHTML) restoreArticleIfNeeded();
         }
     }
     function init(){
         captureOriginalArticle();
-        // Firefox में सिर्फ 1 Sec Loading दिखाओ, फिर Auto Restore
-        if(navigator.userAgent.toLowerCase().includes("firefox")){
-            const t=findMainContent();
-            if(t){
-                const old=t.innerHTML;
-                t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2 style="color:#fff">Loading Content...</h2><p style="color:#8b949e">Please wait</p></div>`;
-                setTimeout(()=>{ if(!articleCurrentlyReplaced &&!legitAdRendered){ restoreArticleIfNeeded(); } },1200);
-            }
-        }
+        // FIX: Firefox Loading अब init में नहीं, evaluate में होगा
         setTimeout(()=>{evaluate();setInterval(evaluate,500);setInterval(runProbeCycle,2000);},300);
     }
     if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
