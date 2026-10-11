@@ -5,7 +5,7 @@
     function isBloggerPreview(){const h=(location.hostname||"").toLowerCase();const hr=(location.href||"").toLowerCase();const s=(location.search||"").toLowerCase();const p=(location.pathname||"").toLowerCase();const rf=(document.referrer||"").toLowerCase();if(h==="blogger.com"||h.endsWith(".blogger.com")||h==="draft.blogger.com")return true;if(/(^|[\/_-])layout-preview([\/_-]|$)/i.test(p)||/(^|[\/_-])template-preview([\/_-]|$)/i.test(p))return true;if(s.includes("preview=true")||s.includes("preview=1")||s.includes("blogger.preview"))return true;if(hr.includes("blogger.com")&&(hr.includes("/layout")||hr.includes("/template")||hr.includes("/edit")))return true;if(window!==window.top&&(rf.includes("blogger.com")||rf.includes("blogspot.com")))return true;return false;}
     if(isBloggerPreview())return;
     function isReaderMode(){try{const href=(location.href||"").toLowerCase();if(href.startsWith("about:reader")||href.includes("moz-reader")||location.protocol==="about:")return true;if(document.documentElement.classList.contains("moz-reader-mode")||document.body.classList.contains("aboutReader")||document.querySelector(".moz-reader-content"))return true;}catch(e){}return false;}
-    const CONFIG={logoUrl:"https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh6O5yJqzqS5Y5Y5Y5Y5Y5/s666",title:"Ad Blocker Detected!",message:"It looks like an ad or content blocker is preventing this page from loading properly. Merayour is a free website supported by readers and advertising. Please allow ads or whitelist Merayour."};
+    const CONFIG={logoUrl:"https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh6O5yJqzqS5Y5Y5Y5Y5Y5Y5Y5/s666",title:"Ad Blocker Detected!",message:"It looks like an ad or content blocker is preventing this page from loading properly. Merayour is a free website supported by readers and advertising. Please allow ads or whitelist Merayour."};
     const WEIGHTS={CRITICAL:70,STRONG:40,MEDIUM:30,WEAK:10};
     let detectionScore=0,legitAdRendered=false,pageLocked=false,lastAdRenderTime=0,missingAdChecks=0;
     const pageLoadStart=performance.now();
@@ -32,6 +32,7 @@
     function isEdgeOrDuck(){return /Edg\/|DuckDuckGo/i.test(ua);}
     setInterval(()=>{const n=performance.now();incidentMap.forEach((ts,id)=>{if(n-ts>4000)incidentMap.delete(id)});},1000);
     function clearEvidence(){detectionScore=0;incidentMap.clear();Object.keys(categoryState).forEach(k=>categoryState[k]=false);Object.keys(evidenceMap).forEach(k=>evidenceMap[k].clear());}
+    // UPGRADE: Continuous Detect Power
     function checkRealAdRender(){
         if(isReaderMode())return false;
         const ads=document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
@@ -47,7 +48,16 @@
             if(cleanStateConfirmations<10)cleanStateConfirmations++;
             if(cleanStateConfirmations>=10){clearEvidence();blockStateConfirmations=0;restoreArticleIfNeeded();unlockPage();}
         }else{
-            if(legitAdRendered){missingAdChecks++;if(missingAdChecks>=4){legitAdRendered=false;cleanStateConfirmations=0;}}else{cleanStateConfirmations=0;}
+            if(legitAdRendered){
+                missingAdChecks++;
+                if(missingAdChecks>=2){ // 4 से 2 - Brave/Soul Fast Re-Detect
+                    legitAdRendered=false;
+                    cleanStateConfirmations=0;
+                    detectionScore=0;
+                    blockStateConfirmations=0;
+                    setTimeout(evaluate,100);
+                }
+            }else{cleanStateConfirmations=0;}
         }
         return rendered;
     }
@@ -59,6 +69,7 @@
         if(document.documentElement)document.documentElement.style.removeProperty("overflow");
         if(document.body)document.body.style.removeProperty("overflow");
     }
+    // UPGRADE: Popup 100% Center Fix
     function createLockOverlay(){
         if(document.getElementById("ag-lock-overlay")||document.querySelector("[data-soul-lock]"))return;
         const randomId="ag-"+Math.random().toString(36).substr(2,9);
@@ -73,12 +84,12 @@
                     display:flex!important;align-items:center!important;justify-content:center!important;
                     padding:20px!important;box-sizing:border-box!important;
                 }
-                #${randomId} .ag-card{
+                #${randomId}.ag-card{
                     max-width:460px!important;width:100%!important;
                     padding:32px 24px!important;background:#161b22!important;
                     border:1px solid #30363d!important;border-radius:12px!important;
                     text-align:center!important;box-shadow:0 8px 32px rgba(0,0,0,0.5)!important;
-                    margin:auto!important;
+                    margin:auto!important;display:block!important;
                 }
                 #${randomId}.ag-card h1{font-size:22px!important;margin:0 0 12px 0!important;color:#fff!important;text-align:center!important}
                 #${randomId}.ag-card p{font-size:14px!important;color:#8b949e!important;line-height:1.5!important;text-align:center!important}
@@ -169,6 +180,7 @@
         if(detectionScore>=80)return true;
         return false;
     }
+    // UPGRADE: Power Mode - Never Stop Checking
     function evaluate(){
         if(isReaderMode()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;return;}
         if(browser.firefox &&!legitAdRendered && nowReady()){
@@ -180,10 +192,15 @@
         if(checkRealAdRender()){
             restoreArticleIfNeeded();
             if(cleanStateConfirmations>=1) unlockPage();
-            if(cleanStateConfirmations>=10) return;
+            // return हटाया - Detection चलता रहेगा
         }
-        if(!nowReady())return;
-        if(legitAdRendered&&cleanStateConfirmations>=10)return;
+        if(!nowReady()){
+            // Grace में भी Soul/Brave को Check करो
+            if(browser.soul||browser.brave||browser.duckduckgo){
+                if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;}
+            }
+            return;
+        }
         if(articleCurrentlyReplaced){
             if(legitAdRendered){restoreArticleIfNeeded();unlockPage();return;}
             createLockOverlay();return;
@@ -191,12 +208,17 @@
         if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;}
         else {
             if(originalArticleHTML) restoreArticleIfNeeded();
-            unlockPage();
+            if(legitAdRendered) unlockPage();
         }
     }
     function init(){
         captureOriginalArticle();
-        setTimeout(()=>{evaluate();setInterval(evaluate,500);setInterval(runProbeCycle,2000);},300);
+        setTimeout(()=>{
+            evaluate();
+            setInterval(evaluate,300); // 500 से 300 - Fast Detect
+            setInterval(checkRealAdRender,400); // नया - Brave/Soul Continuous
+            setInterval(runProbeCycle,1500); // 2000 से 1500
+        },300);
     }
     if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
 })();
