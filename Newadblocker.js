@@ -68,7 +68,7 @@
                     display:flex!important;align-items:center!important;justify-content:center!important;
                     padding:20px!important;box-sizing:border-box!important;
                 }
-                #${randomId}.ag-card{
+                #${randomId} .ag-card{
                     max-width:460px!important;width:100%!important;
                     padding:32px 24px!important;background:#161b22!important;
                     border:1px solid #30363d!important;border-radius:12px!important;
