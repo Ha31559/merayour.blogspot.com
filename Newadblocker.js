@@ -55,7 +55,7 @@
     DETECTION_THRESHOLD: 60,
 
     // Diagnostics: true writes state changes to the console.
-    DIAGNOSTICS: false,
+    DIAGNOSTICS: true,
 
     OVERLAY_ID: "merayour-v92-lock",
     STYLE_ID: "merayour-v92-style",
