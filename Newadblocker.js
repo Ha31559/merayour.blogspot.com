@@ -36,13 +36,13 @@
     ADSENSE_ID: "ca-pub-1011806586686442",
 
     // Grace periods
-    INITIAL_GRACE: 2000,
-    SYSTEM_GRACE: 2000,
+    INITIAL_GRACE: 500,
+    SYSTEM_GRACE: 1000,
 
     // Detection and recovery
     CONFIRMATION_TIME: 1000,
-    RECOVERY_CONFIRMATION_TIME: 3000,
-    CHECK_INTERVAL: 1000,
+    RECOVERY_CONFIRMATION_TIME: 1000,
+    CHECK_INTERVAL: 500,
 
     // Evidence scoring
     GA_SCRIPT_FAILURE: 60,
@@ -52,7 +52,7 @@
     ADSENSE_LIBRARY_MISSING: 60,
 
     // A single signal must not trigger the lock.
-    DETECTION_THRESHOLD: 40,
+    DETECTION_THRESHOLD: 30,
 
     // Diagnostics: true writes state changes to the console.
     DIAGNOSTICS: true,
