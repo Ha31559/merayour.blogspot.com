@@ -1,33 +1,61 @@
 (function () {
   "use strict";
 
-  if (window.__MERAYOUR_ADGUARD_V92__) return;
-  window.__MERAYOUR_ADGUARD_V92__ = true;
-
   // ==========================================================
-  // MERAYOUR ADGUARD V9.2
-  // SMART HEALTH CHECK EDITION
+  // MERAYOUR ADGUARD V10
+  // HYBRID STRICT + BALANCED ADVANCED EDITION
   //
-  // Original DOM Detach Lock preserved.
-  // Healthy Analytics + AdSense suppress stale failures.
-  // Recovery requires sustained positive health evidence.
+  // Preserves:
+  // - Original DOM Detach Lock
+  // - Original overlay design and Reload button
+  // - GA4 monitoring
+  // - AdSense script and slot monitoring
+  // - Initial and system grace periods
+  // - Recovery confirmation
+  //
+  // Improvements:
+  // - Multiple-signal verification
+  // - Script-load race reconciliation
+  // - Performance Resource Timing inspection
+  // - Positive health evidence
+  // - Persistent failure confirmation
+  // - Recovery watchdog
+  // - Optional diagnostic logging
+  //
+  // IMPORTANT:
+  // Browser-side detection cannot guarantee identification
+  // of every ad blocker or distinguish every network failure.
   // ==========================================================
+
+  if (window.MERAYOUR_ADGUARD_V10) return;
+
+  window.MERAYOUR_ADGUARD_V10 = true;
 
   const CONFIG = {
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    INITIAL_GRACE: 3000,
-    SYSTEM_GRACE: 8000,
-    CONFIRMATION_TIME: 3000,
-    RECOVERY_CONFIRMATION_TIME: 5000,
-    CHECK_INTERVAL: 800,
+    // Grace periods
+    INITIAL_GRACE: 5000,
+    SYSTEM_GRACE: 15000,
 
+    // Detection and recovery
+    CONFIRMATION_TIME: 8000,
+    RECOVERY_CONFIRMATION_TIME: 3000,
+    CHECK_INTERVAL: 1000,
+
+    // Evidence scoring
     GA_SCRIPT_FAILURE: 60,
-    GA_ACTIVITY_MISSING: 60,
+    GA_LIBRARY_MISSING: 60,
+
     ADSENSE_SCRIPT_FAILURE: 60,
-    ADSENSE_RENDER_MISSING: 60,
-    DETECTION_THRESHOLD: 50,
+    ADSENSE_LIBRARY_MISSING: 60,
+
+    // A single signal must not trigger the lock.
+    DETECTION_THRESHOLD: 100,
+
+    // Diagnostics: true writes state changes to the console.
+    DIAGNOSTICS: false,
 
     OVERLAY_ID: "merayour-v92-lock",
     STYLE_ID: "merayour-v92-style",
@@ -45,11 +73,13 @@
     gaScriptFound: false,
     gaScriptLoaded: false,
     gaScriptFailed: false,
+    gaResourceSeen: false,
     gaActivitySeen: false,
 
     adsenseScriptFound: false,
     adsenseScriptLoaded: false,
     adsenseScriptFailed: false,
+    adsenseResourceSeen: false,
 
     adSlotsFound: false,
     adFilled: false,
@@ -60,7 +90,9 @@
 
     suspiciousSince: 0,
     healthySince: 0,
+
     locked: false,
+    lastDiagnosticState: "",
 
     observer: null,
     gaObserver: null,
@@ -72,6 +104,28 @@
     savedPageStyles: null,
     lockInProgress: false
   };
+
+  // ==========================================================
+  // DIAGNOSTICS
+  // ==========================================================
+
+  function diagnostic(label, details) {
+    if (!CONFIG.DIAGNOSTICS) return;
+
+    const signature = label + ":" + (details || "");
+
+    if (signature === state.lastDiagnosticState) return;
+
+    state.lastDiagnosticState = signature;
+
+    try {
+      console.info(
+        "[Merayour AdGuard V10]",
+        label,
+        details || ""
+      );
+    } catch (_) {}
+  }
 
   // ==========================================================
   // ENVIRONMENT
@@ -97,7 +151,13 @@
   function classifyScript(src) {
     if (!src) return "";
 
-    const url = src.toLowerCase();
+    let url;
+
+    try {
+      url = new URL(src, location.href).href.toLowerCase();
+    } catch (_) {
+      return "";
+    }
 
     if (
       url.includes("googletagmanager.com/gtag/js") &&
@@ -118,6 +178,68 @@
     return "";
   }
 
+  function isGAResource(url) {
+    if (!url) return false;
+
+    const value = url.toLowerCase();
+
+    return (
+      value.includes("google-analytics.com/g/collect") ||
+      value.includes("analytics.google.com/g/collect") ||
+      value.includes("region1.google-analytics.com/g/collect") ||
+      value.includes("google-analytics.com/collect")
+    );
+  }
+
+  function isGAScriptResource(url) {
+    const type = classifyScript(url);
+    return type === "GA4";
+  }
+
+  function isAdSenseResource(url) {
+    const type = classifyScript(url);
+    return type === "ADSENSE";
+  }
+
+  // ==========================================================
+  // RESOURCE TIMING RECONCILIATION
+  //
+  // Important: script load listeners can be attached after a
+  // script has already loaded. Resource Timing helps identify
+  // this situation, although resource entries alone are not
+  // absolute proof of successful execution.
+  // ==========================================================
+
+  function inspectResources() {
+    let entries = [];
+
+    try {
+      entries = performance.getEntriesByType("resource");
+    } catch (_) {
+      return;
+    }
+
+    entries.forEach(function (entry) {
+      const name = entry.name || "";
+
+      if (isGAScriptResource(name)) {
+        state.gaResourceSeen = true;
+      }
+
+      if (isAdSenseResource(name)) {
+        state.adsenseResourceSeen = true;
+      }
+
+      if (isGAResource(name)) {
+        state.gaActivitySeen = true;
+      }
+    });
+  }
+
+  // ==========================================================
+  // SCRIPT LISTENERS
+  // ==========================================================
+
   function attachScriptListeners(script) {
     if (!script || !script.src) return;
 
@@ -125,11 +247,11 @@
 
     if (!type) return;
 
-    if (script.dataset.merayourV92Watched === "1") {
+    if (script.dataset.merayourV10Watched === "1") {
       return;
     }
 
-    script.dataset.merayourV92Watched = "1";
+    script.dataset.merayourV10Watched = "1";
 
     if (type === "GA4") {
       state.gaScriptFound = true;
@@ -145,6 +267,8 @@
         state.adsenseScriptLoaded = true;
         state.adsenseScriptFailed = false;
       }
+
+      diagnostic("Script loaded", type);
     }, { once: true });
 
     script.addEventListener("error", function () {
@@ -153,9 +277,12 @@
       } else {
         state.adsenseScriptFailed = true;
       }
+
+      diagnostic("Script error observed", type);
     }, { once: true });
   }
 
+  // Capture script-loading errors.
   window.addEventListener("error", function (event) {
     const target = event.target;
 
@@ -206,49 +333,20 @@
   }
 
   // ==========================================================
-  // GA4 ACTIVITY
+  // GA4 ACTIVITY MONITOR
   // ==========================================================
-
-  function isGAResource(url) {
-    if (!url) return false;
-
-    const value = url.toLowerCase();
-
-    return (
-      value.includes("google-analytics.com/g/collect") ||
-      value.includes("analytics.google.com/g/collect") ||
-      value.includes(
-        "region1.google-analytics.com/g/collect"
-      ) ||
-      value.includes("google-analytics.com/collect")
-    );
-  }
-
-  function inspectGAResources() {
-    try {
-      performance.getEntriesByType("resource").forEach(
-        function (entry) {
-          if (isGAResource(entry.name)) {
-            state.gaActivitySeen = true;
-          }
-        }
-      );
-    } catch (_) {}
-  }
 
   function watchGAResources() {
     if (!("PerformanceObserver" in window)) return;
 
     try {
-      state.gaObserver = new PerformanceObserver(
-        function (list) {
-          list.getEntries().forEach(function (entry) {
-            if (isGAResource(entry.name)) {
-              state.gaActivitySeen = true;
-            }
-          });
-        }
-      );
+      state.gaObserver = new PerformanceObserver(function (list) {
+        list.getEntries().forEach(function (entry) {
+          if (isGAResource(entry.name)) {
+            state.gaActivitySeen = true;
+          }
+        });
+      });
 
       state.gaObserver.observe({
         type: "resource",
@@ -287,20 +385,9 @@
         unfilled = true;
       }
 
-      const iframe = slot.querySelector("iframe");
-
-      if (iframe && status === "filled") {
-        const rect = iframe.getBoundingClientRect();
-        const style = getComputedStyle(iframe);
-
-        if (
-          rect.width >= 10 &&
-          rect.height >= 10 &&
-          style.display !== "none" &&
-          style.visibility !== "hidden"
-        ) {
-          filled = true;
-        }
+      // Keep the existing visual iframe check.
+      if (iframeIsVisible(slot, status)) {
+        filled = true;
       }
     });
 
@@ -308,8 +395,91 @@
     state.adUnfilled = unfilled;
   }
 
+  function iframeIsVisible(slot, status) {
+    if (status !== "filled") return false;
+
+    const iframe = slot.querySelector("iframe");
+
+    if (!iframe) return false;
+
+    try {
+      const rect = iframe.getBoundingClientRect();
+      const style = getComputedStyle(iframe);
+
+      return (
+        rect.width >= 10 &&
+        rect.height >= 10 &&
+        style.display !== "none" &&
+        style.visibility !== "hidden"
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ==========================================================
-  // EVIDENCE ENGINE
+  // POSITIVE HEALTH RECONCILIATION
+  // ==========================================================
+
+  function reconcileHealth() {
+    inspectResources();
+
+    // A later positive signal overrides a stale error flag.
+    if (
+      state.gaScriptLoaded ||
+      (
+        state.gaResourceSeen &&
+        typeof window.gtag === "function"
+      ) ||
+      (
+        typeof window.gtag === "function" &&
+        state.gaActivitySeen
+      )
+    ) {
+      state.gaScriptFailed = false;
+    }
+
+    if (
+      state.adsenseScriptLoaded ||
+      (
+        state.adsenseResourceSeen &&
+        typeof window.adsbygoogle !== "undefined"
+      )
+    ) {
+      state.adsenseScriptFailed = false;
+    }
+  }
+
+  function analyticsHealthy() {
+    return (
+      state.gaScriptLoaded ||
+      (
+        state.gaResourceSeen &&
+        typeof window.gtag === "function"
+      ) ||
+      (
+        typeof window.gtag === "function" &&
+        state.gaActivitySeen
+      )
+    );
+  }
+
+  function adsenseHealthy() {
+    return (
+      (
+        state.adsenseScriptLoaded ||
+        state.adsenseResourceSeen
+      ) &&
+      typeof window.adsbygoogle !== "undefined"
+    );
+  }
+
+  // ==========================================================
+  // HYBRID MULTI-SIGNAL EVIDENCE ENGINE
+  //
+  // One isolated failure signal is not enough.
+  // An unfilled ad is not treated as proof of blocking.
+  // Lack of GA activity alone is not treated as proof.
   // ==========================================================
 
   function calculateEvidence() {
@@ -318,53 +488,125 @@
     let gaScore = 0;
     let adScore = 0;
 
-    if (state.gaScriptFailed) {
-      gaScore = CONFIG.GA_SCRIPT_FAILURE;
-    }
+    const gaLibraryPresent =
+      typeof window.gtag === "function";
 
-    if (elapsed >= CONFIG.SYSTEM_GRACE) {
-      if (typeof window.gtag === "undefined") {
-        gaScore = CONFIG.GA_SCRIPT_FAILURE;
-      } else if (
-        state.gaScriptFound &&
-        !state.gaActivitySeen
-      ) {
-        gaScore = CONFIG.GA_ACTIVITY_MISSING;
-      }
-    }
+    const adsLibraryPresent =
+      typeof window.adsbygoogle !== "undefined";
 
-    if (state.adsenseScriptFailed) {
-      adScore = CONFIG.ADSENSE_SCRIPT_FAILURE;
-    }
+    const gaPositive =
+      state.gaScriptLoaded ||
+      (
+        state.gaResourceSeen &&
+        gaLibraryPresent
+      ) ||
+      (
+        gaLibraryPresent &&
+        state.gaActivitySeen
+      );
 
-    if (
+    const adsPositive =
+      (
+        state.adsenseScriptLoaded ||
+        state.adsenseResourceSeen
+      ) &&
+      adsLibraryPresent;
+
+    // --------------------------------------------------------
+    // GA4 EVIDENCE
+    // --------------------------------------------------------
+
+    const gaExplicitFailure =
+      state.gaScriptFailed &&
+      !gaPositive;
+
+    const gaLibraryMissing =
       elapsed >= CONFIG.SYSTEM_GRACE &&
-      typeof window.adsbygoogle === "undefined"
-    ) {
-      adScore = CONFIG.ADSENSE_SCRIPT_FAILURE;
+      state.gaScriptFound &&
+      !state.gaScriptLoaded &&
+      !state.gaResourceSeen &&
+      !gaLibraryPresent &&
+      !state.gaActivitySeen;
+
+    if (gaExplicitFailure) {
+      gaScore += CONFIG.GA_SCRIPT_FAILURE;
     }
 
-    if (
+    if (gaLibraryMissing) {
+      gaScore += CONFIG.GA_LIBRARY_MISSING;
+    }
+
+    // --------------------------------------------------------
+    // ADSENSE EVIDENCE
+    // --------------------------------------------------------
+
+    const adsExplicitFailure =
+      state.adsenseScriptFailed &&
+      !adsPositive;
+
+    const adsLibraryMissing =
       elapsed >= CONFIG.SYSTEM_GRACE &&
       state.adsenseScriptFound &&
-      state.adSlotsFound &&
-      !state.adFilled &&
-      !state.adUnfilled
-    ) {
-      adScore = Math.max(
-        adScore,
-        CONFIG.ADSENSE_RENDER_MISSING
-      );
+      !state.adsenseScriptLoaded &&
+      !state.adsenseResourceSeen &&
+      !adsLibraryPresent;
+
+    if (adsExplicitFailure) {
+      adScore += CONFIG.ADSENSE_SCRIPT_FAILURE;
     }
+
+    if (adsLibraryMissing) {
+      adScore += CONFIG.ADSENSE_LIBRARY_MISSING;
+    }
+
+    // "unfilled" is a valid AdSense outcome and never adds
+    // blocking evidence by itself.
+    //
+    // No ad slot, no fill, missing GA activity, and missing
+    // data-ad-status are not standalone blocker proofs.
 
     state.gaFailureScore = gaScore;
     state.adsenseFailureScore = adScore;
 
+    const total = gaScore + adScore;
+
+    // Require multiple independent signal categories:
+    //
+    // A. Strong failure evidence for both services; OR
+    // B. Multiple consistent signals for one service.
+    //
+    // Persistent confirmation time is also required later.
+    const gaMultipleSignals =
+      gaExplicitFailure && gaLibraryMissing;
+
+    const adsMultipleSignals =
+      adsExplicitFailure && adsLibraryMissing;
+
+    const bothServicesFailed =
+      gaScore >= CONFIG.GA_SCRIPT_FAILURE &&
+      adScore >= CONFIG.ADSENSE_SCRIPT_FAILURE;
+
+    const multipleSignals =
+      bothServicesFailed ||
+      gaMultipleSignals ||
+      adsMultipleSignals;
+
     return {
       ga: gaScore,
       adsense: adScore,
-      total: Math.max(gaScore, adScore),
-      suspicious: gaScore > 0 || adScore > 0
+      total: total,
+
+      gaExplicitFailure: gaExplicitFailure,
+      gaLibraryMissing: gaLibraryMissing,
+
+      adsExplicitFailure: adsExplicitFailure,
+      adsLibraryMissing: adsLibraryMissing,
+
+      multipleSignals: multipleSignals,
+
+      suspicious:
+        multipleSignals &&
+        total >= CONFIG.DETECTION_THRESHOLD
     };
   }
 
@@ -439,14 +681,17 @@
         document.documentElement.style.getPropertyValue(
           "overflow"
         ),
+
       htmlOverflowPriority:
         document.documentElement.style.getPropertyPriority(
           "overflow"
         ),
+
       bodyOverflow:
         document.body
           ? document.body.style.getPropertyValue("overflow")
           : "",
+
       bodyOverflowPriority:
         document.body
           ? document.body.style.getPropertyPriority("overflow")
@@ -478,6 +723,7 @@
 
         try {
           parent.replaceChild(placeholder, el);
+
           state.detachedContent.set(el, record);
         } catch (_) {}
       });
@@ -546,6 +792,7 @@
             el,
             record.placeholder
           );
+
           return;
         }
 
@@ -562,6 +809,7 @@
     });
 
     state.detachedContent.clear();
+
     restorePageStyles();
   }
 
@@ -575,6 +823,7 @@
     }
 
     const style = document.createElement("style");
+
     style.id = CONFIG.STYLE_ID;
 
     style.textContent = `
@@ -653,30 +902,39 @@
 
     if (!overlay) {
       overlay = document.createElement("div");
+
       overlay.id = CONFIG.OVERLAY_ID;
+
       overlay.setAttribute("role", "dialog");
       overlay.setAttribute("aria-modal", "true");
+
       overlay.setAttribute(
         "aria-labelledby",
         "merayour-v92-heading"
       );
 
       const card = document.createElement("div");
+
       card.className = "ag-v92-card";
 
       const heading = document.createElement("h2");
+
       heading.id = "merayour-v92-heading";
       heading.textContent = "Ad Blocker Detected!";
 
       const message = document.createElement("p");
+
       message.textContent =
         "Merayour is supported by advertising. Please allow " +
         "Google Analytics and advertising services for this website, " +
         "then reload the page to continue reading.";
 
       const button = document.createElement("button");
+
       button.type = "button";
-      button.textContent = "I've Allowed Ads — Reload";
+
+      button.textContent =
+        "I've Allowed Ads — Reload";
 
       button.addEventListener("click", function () {
         location.reload();
@@ -696,6 +954,8 @@
     state.locked = true;
 
     detachContent();
+
+    diagnostic("Content locked", "Persistent multi-signal evidence");
 
     if (
       !state.lockObserver &&
@@ -749,37 +1009,33 @@
 
     state.suspiciousSince = 0;
     state.healthySince = 0;
+
+    diagnostic("Lock removed", "Health recovery confirmed");
   }
 
   // ==========================================================
-  // SMART MAIN LOOP — TUNED
+  // HYBRID WATCHDOG
   // ==========================================================
 
   function evaluate() {
-    inspectGAResources();
+    inspectResources();
     inspectAdSlots();
+    reconcileHealth();
 
     const elapsed = Date.now() - startedAt;
 
+    // Allow the page to initialize.
     if (elapsed < CONFIG.INITIAL_GRACE) {
       return;
     }
 
-    // Positive health evidence must exist for BOTH services.
-    const analyticsHealthy =
-      typeof window.gtag === "function" &&
-      state.gaActivitySeen;
+    const gaHealthy = analyticsHealthy();
+    const adsHealthy = adsenseHealthy();
 
-    const adsenseHealthy =
-      typeof window.adsbygoogle !== "undefined" &&
-      state.adFilled;
+    const bothHealthy = gaHealthy && adsHealthy;
 
-    const bothServicesHealthy =
-      analyticsHealthy && adsenseHealthy;
-
-    // HEALTHY OVERRIDE:
-    // Do not let stale script failures trigger a false popup.
-    if (bothServicesHealthy) {
+    // Positive health evidence clears stale failure flags.
+    if (bothHealthy) {
       state.gaScriptFailed = false;
       state.adsenseScriptFailed = false;
 
@@ -790,9 +1046,13 @@
 
       if (!state.locked) {
         state.healthySince = 0;
+
+        diagnostic("Healthy", "Both services have positive evidence");
+
         return;
       }
 
+      // Keep the recovery confirmation period.
       if (!state.healthySince) {
         state.healthySince = Date.now();
       }
@@ -807,17 +1067,25 @@
       return;
     }
 
-    // If either service is not positively verified,
-    // return to the original evidence engine.
     state.healthySince = 0;
+
+    // Never lock before the system grace period.
+    if (elapsed < CONFIG.SYSTEM_GRACE) {
+      state.suspiciousSince = 0;
+      return;
+    }
 
     const evidence = calculateEvidence();
 
-    const suspicious =
-      evidence.suspicious &&
-      evidence.total >= CONFIG.DETECTION_THRESHOLD;
+    diagnostic(
+      "Evidence evaluated",
+      "GA=" + evidence.ga +
+      ", AdSense=" + evidence.adsense +
+      ", Multiple=" + evidence.multipleSignals
+    );
 
-    if (!suspicious) {
+    // Strict threshold + Balanced multi-signal confirmation.
+    if (!evidence.suspicious) {
       state.suspiciousSince = 0;
       return;
     }
@@ -826,9 +1094,11 @@
       state.suspiciousSince = Date.now();
     }
 
+    const suspiciousDuration =
+      Date.now() - state.suspiciousSince;
+
     if (
-      Date.now() - state.suspiciousSince >=
-      CONFIG.CONFIRMATION_TIME
+      suspiciousDuration >= CONFIG.CONFIRMATION_TIME
     ) {
       createLock();
     }
@@ -842,8 +1112,12 @@
     watchScripts();
     watchGAResources();
 
-    inspectGAResources();
+    inspectResources();
     inspectAdSlots();
+
+    // Reconcile scripts that may have loaded before listeners
+    // were attached.
+    reconcileHealth();
 
     state.timer = window.setInterval(
       evaluate,
@@ -851,6 +1125,8 @@
     );
 
     evaluate();
+
+    diagnostic("Initialized", "Hybrid Advanced Edition");
   }
 
   if (document.readyState === "loading") {
