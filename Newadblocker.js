@@ -1,12 +1,13 @@
 (function () {
   "use strict";
 
-  if (window.__MERAYOUR_ADGUARD_V9__) return;
-  window.__MERAYOUR_ADGUARD_V9__ = true;
+  if (window.__MERAYOUR_ADGUARD_V91__) return;
+  window.__MERAYOUR_ADGUARD_V91__ = true;
 
   // ==========================================================
-  // MERAYOUR ADGUARD V9 — ZERO TOLERANCE MODE
-  // GA4 OR ADSENSE FAILURE = CONTENT LOCK
+  // MERAYOUR ADGUARD V9.1 — CONTENT LOCK EDITION
+  // GA4 OR ADSENSE FAILURE = LOCK
+  // ORIGINAL ARTICLE HTML IS PRESERVED
   // ==========================================================
 
   const CONFIG = {
@@ -16,18 +17,27 @@
     INITIAL_GRACE: 3000,
     SYSTEM_GRACE: 8000,
     CONFIRMATION_TIME: 3000,
+    RECOVERY_CONFIRMATION_TIME: 5000,
     CHECK_INTERVAL: 800,
 
     GA_SCRIPT_FAILURE: 60,
     GA_ACTIVITY_MISSING: 60,
-
     ADSENSE_SCRIPT_FAILURE: 60,
     ADSENSE_RENDER_MISSING: 60,
-
     DETECTION_THRESHOLD: 50,
 
-    OVERLAY_ID: "merayour-v9-lock",
-    STYLE_ID: "merayour-v9-style"
+    OVERLAY_ID: "merayour-v91-lock",
+    STYLE_ID: "merayour-v91-style",
+
+    // Add your actual article selectors if your theme
+    // uses a different content container.
+    CONTENT_SELECTORS: [
+      ".post-body",
+      ".post-outer",
+      ".post",
+      "article",
+      ".blog-posts"
+    ]
   };
 
   const startedAt = Date.now();
@@ -50,14 +60,19 @@
     adsenseFailureScore: 0,
 
     suspiciousSince: 0,
+    healthySince: 0,
     locked: false,
 
     observer: null,
-    timer: null
+    lockObserver: null,
+    timer: null,
+
+    protectedElements: new Map(),
+    lockInProgress: false
   };
 
   // ==========================================================
-  // ENVIRONMENT CHECKS
+  // ENVIRONMENT
   // ==========================================================
 
   function isBloggerPreview() {
@@ -69,18 +84,6 @@
       host.endsWith(".blogger.com") ||
       /(?:^|[?&])preview=(?:true|1)(?:&|$)/.test(search)
     );
-  }
-
-  function isReaderMode() {
-    try {
-      return (
-        location.href.startsWith("about:reader") ||
-        document.documentElement.classList.contains("moz-reader-mode") ||
-        !!document.querySelector(".moz-reader-content")
-      );
-    } catch (_) {
-      return false;
-    }
   }
 
   if (isBloggerPreview()) return;
@@ -111,26 +114,19 @@
     return "";
   }
 
-  // ==========================================================
-  // SCRIPT STATE MONITOR
-  // ==========================================================
-
   function attachScriptListeners(script) {
     if (!script || !script.src) return;
 
     const type = classifyScript(script.src);
-
     if (!type) return;
 
-    if (script.dataset.merayourV9Watched === "1") return;
+    if (script.dataset.merayourV91Watched === "1") return;
 
-    script.dataset.merayourV9Watched = "1";
+    script.dataset.merayourV91Watched = "1";
 
     if (type === "GA4") {
       state.gaScriptFound = true;
-    }
-
-    if (type === "ADSENSE") {
+    } else {
       state.adsenseScriptFound = true;
     }
 
@@ -138,9 +134,7 @@
       if (type === "GA4") {
         state.gaScriptLoaded = true;
         state.gaScriptFailed = false;
-      }
-
-      if (type === "ADSENSE") {
+      } else {
         state.adsenseScriptLoaded = true;
         state.adsenseScriptFailed = false;
       }
@@ -149,16 +143,12 @@
     script.addEventListener("error", function () {
       if (type === "GA4") {
         state.gaScriptFailed = true;
-      }
-
-      if (type === "ADSENSE") {
+      } else {
         state.adsenseScriptFailed = true;
       }
     }, { once: true });
   }
 
-  // Capture script resource errors, including scripts
-  // inserted after the initial page markup.
   window.addEventListener("error", function (event) {
     const target = event.target;
 
@@ -169,9 +159,7 @@
     if (type === "GA4") {
       state.gaScriptFound = true;
       state.gaScriptFailed = true;
-    }
-
-    if (type === "ADSENSE") {
+    } else if (type === "ADSENSE") {
       state.adsenseScriptFound = true;
       state.adsenseScriptFailed = true;
     }
@@ -209,9 +197,7 @@
   }
 
   // ==========================================================
-  // GA4 ACTIVITY MONITOR
-  // Observe actual browser resource entries.
-  // No fabricated requests.
+  // GA4 ACTIVITY
   // ==========================================================
 
   function isGAResource(url) {
@@ -278,29 +264,23 @@
         slot.getAttribute("data-ad-status") || ""
       ).toLowerCase();
 
-      if (status === "filled") {
-        filled = true;
-      }
+      if (status === "filled") filled = true;
+      if (status === "unfilled") unfilled = true;
 
-      if (status === "unfilled") {
-        unfilled = true;
-      }
-
-      // A visible iframe is supplementary evidence.
-      // An iframe alone cannot prove that an ad was served.
+      // A visible iframe is not proof of a served ad
+      // unless AdSense itself reports the slot as filled.
       const iframe = slot.querySelector("iframe");
 
-      if (iframe) {
+      if (iframe && status === "filled") {
         const rect = iframe.getBoundingClientRect();
         const style = getComputedStyle(iframe);
 
-        const visible =
+        if (
           rect.width >= 10 &&
           rect.height >= 10 &&
           style.display !== "none" &&
-          style.visibility !== "hidden";
-
-        if (visible && status === "filled") {
+          style.visibility !== "hidden"
+        ) {
           filled = true;
         }
       }
@@ -311,8 +291,7 @@
   }
 
   // ==========================================================
-  // ZERO TOLERANCE EVIDENCE ENGINE
-  // Either system can independently trigger a lock.
+  // EVIDENCE ENGINE
   // ==========================================================
 
   function calculateEvidence() {
@@ -321,14 +300,10 @@
     let gaScore = 0;
     let adScore = 0;
 
-    // GA4: explicit script failure.
     if (state.gaScriptFailed) {
       gaScore = CONFIG.GA_SCRIPT_FAILURE;
     }
 
-    // GA4: configured GA4 is not available after grace.
-    // A defined gtag function alone does not prove that
-    // its external script or requests are working.
     if (elapsed >= CONFIG.SYSTEM_GRACE) {
       if (typeof window.gtag === "undefined") {
         gaScore = CONFIG.GA_SCRIPT_FAILURE;
@@ -336,19 +311,14 @@
         state.gaScriptFound &&
         !state.gaActivitySeen
       ) {
-        gaScore = Math.max(
-          gaScore,
-          CONFIG.GA_ACTIVITY_MISSING
-        );
+        gaScore = CONFIG.GA_ACTIVITY_MISSING;
       }
     }
 
-    // AdSense: explicit script failure.
     if (state.adsenseScriptFailed) {
       adScore = CONFIG.ADSENSE_SCRIPT_FAILURE;
     }
 
-    // AdSense: expected global is missing after grace.
     if (
       elapsed >= CONFIG.SYSTEM_GRACE &&
       typeof window.adsbygoogle === "undefined"
@@ -356,9 +326,6 @@
       adScore = CONFIG.ADSENSE_SCRIPT_FAILURE;
     }
 
-    // AdSense: a real configured slot remains unresolved.
-    // An explicitly unfilled slot is not independently
-    // considered proof of an AdBlocker.
     if (
       elapsed >= CONFIG.SYSTEM_GRACE &&
       state.adsenseScriptFound &&
@@ -378,141 +345,279 @@
     return {
       ga: gaScore,
       adsense: adScore,
-
-      // Keep the strongest system score.
       total: Math.max(gaScore, adScore),
-
-      // ZERO TOLERANCE: either system is sufficient.
-      eitherSystemSuspicious:
-        gaScore > 0 || adScore > 0
+      suspicious: gaScore > 0 || adScore > 0
     };
   }
 
   // ==========================================================
-  // LOCK SCREEN
-  // Original article HTML remains untouched.
+  // CONTENT PROTECTION
+  // Preserve original HTML and existing listeners.
   // ==========================================================
 
-  function createLock() {
-    if (state.locked || !document.body) return;
+  function getProtectedElements() {
+    const found = new Set();
 
-    if (document.getElementById(CONFIG.OVERLAY_ID)) {
-      state.locked = true;
-      return;
-    }
-
-    if (!document.getElementById(CONFIG.STYLE_ID)) {
-      const style = document.createElement("style");
-
-      style.id = CONFIG.STYLE_ID;
-
-      style.textContent = `
-        #${CONFIG.OVERLAY_ID} {
-          position: fixed !important;
-          inset: 0 !important;
-          z-index: 2147483647 !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          padding: 22px !important;
-          box-sizing: border-box !important;
-          background: rgba(8,10,16,.98) !important;
-          color: #fff !important;
-          font-family: Arial,sans-serif !important;
+    CONFIG.CONTENT_SELECTORS.forEach(function (selector) {
+      document.querySelectorAll(selector).forEach(function (el) {
+        if (
+          el.id === CONFIG.OVERLAY_ID ||
+          el.closest("#" + CONFIG.OVERLAY_ID)
+        ) {
+          return;
         }
 
-        #${CONFIG.OVERLAY_ID} .ag-v9-card {
-          width: 100% !important;
-          max-width: 470px !important;
-          padding: 30px 24px !important;
-          box-sizing: border-box !important;
-          text-align: center !important;
-          background: #151923 !important;
-          border: 1px solid #a52b38 !important;
-          border-radius: 12px !important;
-          box-shadow: 0 10px 40px rgba(0,0,0,.5) !important;
+        // Avoid protecting the whole document or body.
+        if (
+          el === document.body ||
+          el === document.documentElement
+        ) {
+          return;
         }
 
-        #${CONFIG.OVERLAY_ID} h2 {
-          margin: 0 0 16px !important;
-          color: #ff626c !important;
-          font-size: 25px !important;
-          line-height: 1.35 !important;
-        }
-
-        #${CONFIG.OVERLAY_ID} p {
-          color: #d2d5df !important;
-          font-size: 15px !important;
-          line-height: 1.7 !important;
-        }
-
-        #${CONFIG.OVERLAY_ID} button {
-          margin-top: 12px !important;
-          padding: 13px 20px !important;
-          border: 0 !important;
-          border-radius: 6px !important;
-          background: #b92f3b !important;
-          color: #fff !important;
-          font-weight: bold !important;
-          font-size: 15px !important;
-          cursor: pointer !important;
-        }
-      `;
-
-      document.head.appendChild(style);
-    }
-
-    const overlay = document.createElement("div");
-    overlay.id = CONFIG.OVERLAY_ID;
-
-    const card = document.createElement("div");
-    card.className = "ag-v9-card";
-
-    const heading = document.createElement("h2");
-    heading.textContent = "Ad Blocker Detected!";
-
-    const message = document.createElement("p");
-    message.textContent =
-      "Merayour is supported by advertising. " +
-      "Please allow Google Analytics and advertising services " +
-      "on this website, then reload the page to continue reading.";
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "I've Allowed Ads — Reload";
-
-    button.addEventListener("click", function () {
-      location.reload();
+        found.add(el);
+      });
     });
 
-    card.appendChild(heading);
-    card.appendChild(message);
-    card.appendChild(button);
-    overlay.appendChild(card);
+    // Remove nested candidates when a parent is already protected.
+    return Array.from(found).filter(function (el) {
+      return !Array.from(found).some(function (other) {
+        return other !== el && other.contains(el);
+      });
+    });
+  }
 
-    document.body.appendChild(overlay);
+  function protectContent() {
+    if (state.lockInProgress) return;
+
+    state.lockInProgress = true;
+
+    try {
+      getProtectedElements().forEach(function (el) {
+        if (!state.protectedElements.has(el)) {
+          state.protectedElements.set(el, {
+            inert: el.inert,
+            ariaHidden: el.getAttribute("aria-hidden"),
+            userSelect: el.style.userSelect,
+            pointerEvents: el.style.pointerEvents
+          });
+        }
+
+        el.inert = true;
+        el.setAttribute("aria-hidden", "true");
+        el.style.setProperty("user-select", "none", "important");
+        el.style.setProperty("pointer-events", "none", "important");
+      });
+
+      document.documentElement.style.setProperty(
+        "overflow",
+        "hidden",
+        "important"
+      );
+
+      document.body.style.setProperty(
+        "overflow",
+        "hidden",
+        "important"
+      );
+    } finally {
+      state.lockInProgress = false;
+    }
+  }
+
+  function restoreContent() {
+    state.protectedElements.forEach(function (original, el) {
+      if (!el.isConnected) return;
+
+      el.inert = original.inert;
+
+      if (original.ariaHidden === null) {
+        el.removeAttribute("aria-hidden");
+      } else {
+        el.setAttribute("aria-hidden", original.ariaHidden);
+      }
+
+      if (original.userSelect) {
+        el.style.userSelect = original.userSelect;
+      } else {
+        el.style.removeProperty("user-select");
+      }
+
+      if (original.pointerEvents) {
+        el.style.pointerEvents = original.pointerEvents;
+      } else {
+        el.style.removeProperty("pointer-events");
+      }
+    });
+
+    state.protectedElements.clear();
+
+    document.documentElement.style.removeProperty("overflow");
+
+    if (document.body) {
+      document.body.style.removeProperty("overflow");
+    }
+  }
+
+  // ==========================================================
+  // OVERLAY
+  // ==========================================================
+
+  function installStyles() {
+    if (document.getElementById(CONFIG.STYLE_ID)) return;
+
+    const style = document.createElement("style");
+    style.id = CONFIG.STYLE_ID;
+
+    style.textContent = `
+      #${CONFIG.OVERLAY_ID} {
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: 2147483647 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 22px !important;
+        box-sizing: border-box !important;
+        background: rgba(8,10,16,.99) !important;
+        color: #fff !important;
+        font-family: Arial,sans-serif !important;
+        overflow: auto !important;
+        overscroll-behavior: contain !important;
+        isolation: isolate !important;
+      }
+
+      #${CONFIG.OVERLAY_ID} .ag-v91-card {
+        width: 100% !important;
+        max-width: 470px !important;
+        padding: 30px 24px !important;
+        box-sizing: border-box !important;
+        text-align: center !important;
+        background: #151923 !important;
+        border: 1px solid #a52b38 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 10px 40px rgba(0,0,0,.7) !important;
+      }
+
+      #${CONFIG.OVERLAY_ID} h2 {
+        margin: 0 0 16px !important;
+        color: #ff626c !important;
+        font-size: 25px !important;
+        line-height: 1.35 !important;
+      }
+
+      #${CONFIG.OVERLAY_ID} p {
+        color: #d2d5df !important;
+        font-size: 15px !important;
+        line-height: 1.7 !important;
+      }
+
+      #${CONFIG.OVERLAY_ID} button {
+        margin-top: 12px !important;
+        padding: 13px 20px !important;
+        border: 0 !important;
+        border-radius: 6px !important;
+        background: #b92f3b !important;
+        color: #fff !important;
+        font-weight: bold !important;
+        font-size: 15px !important;
+        cursor: pointer !important;
+      }
+    `;
+
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function createLock() {
+    if (!document.body) return;
+
+    installStyles();
+
+    let overlay = document.getElementById(CONFIG.OVERLAY_ID);
+
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = CONFIG.OVERLAY_ID;
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      overlay.setAttribute("aria-labelledby", "merayour-v91-heading");
+
+      const card = document.createElement("div");
+      card.className = "ag-v91-card";
+
+      const heading = document.createElement("h2");
+      heading.id = "merayour-v91-heading";
+      heading.textContent = "Ad Blocker Detected!";
+
+      const message = document.createElement("p");
+      message.textContent =
+        "Merayour is supported by advertising. Please allow " +
+        "Google Analytics and advertising services for this website, " +
+        "then reload the page to continue reading.";
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "I've Allowed Ads — Reload";
+
+      button.addEventListener("click", function () {
+        location.reload();
+      });
+
+      card.appendChild(heading);
+      card.appendChild(message);
+      card.appendChild(button);
+      overlay.appendChild(card);
+    }
+
+    if (!overlay.isConnected) {
+      document.body.appendChild(overlay);
+    }
 
     state.locked = true;
+    protectContent();
+
+    // Re-apply content protection if the theme inserts
+    // additional matching article containers while locked.
+    if (!state.lockObserver && document.documentElement) {
+      state.lockObserver = new MutationObserver(function () {
+        if (!state.locked) return;
+
+        if (!document.getElementById(CONFIG.OVERLAY_ID)) {
+          document.body.appendChild(overlay);
+        }
+
+        protectContent();
+      });
+
+      state.lockObserver.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+      });
+    }
   }
 
   function removeLock() {
     const overlay = document.getElementById(CONFIG.OVERLAY_ID);
 
-    if (overlay) {
-      overlay.remove();
+    if (overlay) overlay.remove();
+
+    if (state.lockObserver) {
+      state.lockObserver.disconnect();
+      state.lockObserver = null;
     }
+
+    restoreContent();
 
     state.locked = false;
     state.suspiciousSince = 0;
+    state.healthySince = 0;
   }
 
   // ==========================================================
-  // MAIN EVALUATION LOOP
+  // MAIN LOOP
   // ==========================================================
 
   function evaluate() {
-    if (isReaderMode()) return;
-
     inspectGAResources();
     inspectAdSlots();
 
@@ -521,38 +626,41 @@
     if (elapsed < CONFIG.INITIAL_GRACE) return;
 
     const evidence = calculateEvidence();
-
-    /*
-     * IMPORTANT:
-     * A filled AdSense slot does not cancel a GA4 failure.
-     * A working GA4 script does not cancel an AdSense failure.
-     */
     const suspicious =
-      evidence.eitherSystemSuspicious &&
+      evidence.suspicious &&
       evidence.total >= CONFIG.DETECTION_THRESHOLD;
 
-    if (!suspicious) {
-      state.suspiciousSince = 0;
+    if (suspicious) {
+      state.healthySince = 0;
 
-      // Recover automatically when neither system is
-      // currently producing a failure signal.
-      if (state.locked) {
-        removeLock();
+      if (!state.suspiciousSince) {
+        state.suspiciousSince = Date.now();
+      }
+
+      if (
+        Date.now() - state.suspiciousSince >=
+        CONFIG.CONFIRMATION_TIME
+      ) {
+        createLock();
       }
 
       return;
     }
 
-    if (!state.suspiciousSince) {
-      state.suspiciousSince = Date.now();
-      return;
-    }
+    state.suspiciousSince = 0;
 
-    if (
-      Date.now() - state.suspiciousSince >=
-      CONFIG.CONFIRMATION_TIME
-    ) {
-      createLock();
+    // Require a continuous healthy period before unlocking.
+    if (state.locked) {
+      if (!state.healthySince) {
+        state.healthySince = Date.now();
+      }
+
+      if (
+        Date.now() - state.healthySince >=
+        CONFIG.RECOVERY_CONFIRMATION_TIME
+      ) {
+        removeLock();
+      }
     }
   }
 
