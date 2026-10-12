@@ -37,7 +37,7 @@
 
     // Grace periods
     INITIAL_GRACE: 2000,
-    SYSTEM_GRACE: 5000,
+    SYSTEM_GRACE: 2000,
 
     // Detection and recovery
     CONFIRMATION_TIME: 1000,
