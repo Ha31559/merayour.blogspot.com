@@ -45,14 +45,14 @@
     CHECK_INTERVAL: 500,
 
     // Evidence scoring
-    GA_SCRIPT_FAILURE: 60,
-    GA_LIBRARY_MISSING: 60,
+    GA_SCRIPT_FAILURE: 50,
+    GA_LIBRARY_MISSING: 50,
 
-    ADSENSE_SCRIPT_FAILURE: 60,
-    ADSENSE_LIBRARY_MISSING: 60,
+    ADSENSE_SCRIPT_FAILURE: 50,
+    ADSENSE_LIBRARY_MISSING: 50,
 
     // A single signal must not trigger the lock.
-    DETECTION_THRESHOLD: 30,
+    DETECTION_THRESHOLD: 1,
 
     // Diagnostics: true writes state changes to the console.
     DIAGNOSTICS: true,
