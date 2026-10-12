@@ -1,295 +1,281 @@
 (function () {
     "use strict";
+    if (window.__MERAYOUR_ADGUARD_ACTIVE__) return;
+    window.__MERAYOUR_ADGUARD_ACTIVE__ = true;
 
-    // 1. Runtime Anti-Collision & Obfuscated Global Key
-    const _rk = "_" + Math.random().toString(36).substr(2, 9) + "_";
-    if (window[_rk]) return;
-    window[_rk] = true;
-
-    // 2. Anti-Bypass: Protect window.adsbygoogle from being mocked/wiped
-    try {
-        let _agQueue = window.adsbygoogle || [];
-        Object.defineProperty(window, "adsbygoogle", {
-            get: function () { return _agQueue; },
-            set: function (v) { _agQueue = v; },
-            configurable: false
-        });
-    } catch (e) {}
-
-    // 3. Blogger & Preview Safety Check
-    function isBloggerPreview() {
-        try {
-            const h = (location.hostname || "").toLowerCase();
-            const hr = (location.href || "").toLowerCase();
-            const s = (location.search || "").toLowerCase();
-            const p = (location.pathname || "").toLowerCase();
-            const rf = (document.referrer || "").toLowerCase();
-            if (h === "blogger.com" || h.endsWith(".blogger.com") || h === "draft.blogger.com") return true;
-            if (/(^|[\/_-])layout-preview([\/_-]|$)/i.test(p) \vert{}\vert{} /(^\vert{}[\/_-])template-preview([\/_-]\vert{}$)/i.test(p)) return true;
-            if (s.includes("preview=true") || s.includes("preview=1") || s.includes("blogger.preview")) return true;
-            if (hr.includes("blogger.com") && (hr.includes("/layout") || hr.includes("/template") || hr.includes("/edit"))) return true;
-            if (window !== window.top && (rf.includes("blogger.com") || rf.includes("blogspot.com"))) return true;
-        } catch (e) {}
+    // 1. Blogger & Preview Bypass Check
+    function isBloggerPreview(){
+        const h=(location.hostname||"").toLowerCase();
+        const hr=(location.href||"").toLowerCase();
+        const s=(location.search||"").toLowerCase();
+        const p=(location.pathname||"").toLowerCase();
+        const rf=(document.referrer||"").toLowerCase();
+        if(h==="blogger.com"||h.endsWith(".blogger.com")||h==="draft.blogger.com")return true;
+        if(/(^|[\/_-])layout-preview([\/_-]|$)/i.test(p)\vert{}\vert{}/(^\vert{}[\/_-])template-preview([\/_-]\vert{}$)/i.test(p))return true;
+        if(s.includes("preview=true")||s.includes("preview=1")||s.includes("blogger.preview"))return true;
+        if(hr.includes("blogger.com")&&(hr.includes("/layout")||hr.includes("/template")||hr.includes("/edit")))return true;
+        if(window!==window.top&&(rf.includes("blogger.com")||rf.includes("blogspot.com")))return true;
         return false;
     }
-    if (isBloggerPreview()) return;
+    if(isBloggerPreview())return;
 
-    // 4. Advanced Reader Mode Detection
-    function isReaderMode() {
-        try {
-            const href = (location.href || "").toLowerCase();
-            if (href.startsWith("about:reader") || href.includes("moz-reader") || location.protocol === "about:") return true;
-            if (document.documentElement.classList.contains("moz-reader-mode") || document.body.classList.contains("aboutReader") || document.querySelector(".moz-reader-content")) return true;
-            if (window.screen && window.innerWidth < 400 && document.body && document.body.innerText && document.body.innerText.length > 500 && document.querySelectorAll("ins.adsbygoogle").length === 0) {
-                if (document.querySelectorAll("header, footer, nav").length === 0) return true;
-            }
-        } catch (e) {}
+    // 2. Strict Reader Mode Detection
+    function isReaderMode(){
+        try{
+            const href=(location.href||"").toLowerCase();
+            if(href.startsWith("about:reader")||href.includes("moz-reader")||location.protocol==="about:")return true;
+            if(document.documentElement.classList.contains("moz-reader-mode")||document.body.classList.contains("aboutReader")||document.querySelector(".moz-reader-content"))return true;
+        }catch(e){}
         return false;
     }
 
-    const CONFIG = {
-        title: "Ad Blocker Detected!",
-        message: "It looks like an ad or content blocker is active. This website relies on ads to stay free for everyone. Please whitelist this site or disable your ad blocker to view the content."
+    const CONFIG={
+        logoUrl:"https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh6O5yJqzqS5Y5Y5Y5Y5Y5Y5Y5/s666",
+        title:"Ad Blocker Detected!",
+        message:"It looks like an ad or content blocker is preventing this page from loading properly. Merayour is a free website supported by readers and advertising. Please allow ads or whitelist Merayour."
     };
+    const WEIGHTS={CRITICAL:70,STRONG:40,MEDIUM:30,WEAK:10};
+    
+    let detectionScore=0, legitAdRendered=false, pageLocked=false, missingAdChecks=0;
+    const pageLoadStart=performance.now();
+    const incidentMap=new Map();
+    const evidenceMap={NETWORK:new Set(),DOM_COSMETIC:new Set(),BROWSER_ENGINE:new Set(),RESOURCE:new Set(),REMOVAL:new Set(),SCRIPT_BLOCK:new Set(),DUCKDUCKGO:new Set(),DRILL:new Set()};
+    const categoryState={NETWORK:false,DOM_COSMETIC:false,BROWSER_ENGINE:false,RESOURCE:false,REMOVAL:false,SCRIPT_BLOCK:false,DUCKDUCKGO:false,DRILL:false};
+    
+    // Fast & Responsive Timings (From Version 1 & 5)
+    const INITIAL_GRACE=1000, ADSENSE_LOAD_GRACE=2500, INCIDENT_TTL=4000;
+    let mainContent=null, originalArticleHTML=null, originalArticleCaptured=false, articleCurrentlyReplaced=false, cleanStateConfirmations=0;
 
-    let legitAdRendered = false;
-    let cleanStateConfirmations = 0;
-    let blockStateConfirmations = 0;
-    const pageLoadStart = performance.now();
-
-    let mainContent = null;
-    let originalArticleHTML = null;
-    let originalArticleCaptured = false;
-    let articleCurrentlyReplaced = false;
-
-    function findMainContent() {
-        if (mainContent && document.documentElement.contains(mainContent)) return mainContent;
-        mainContent = document.querySelector("article, .post-body, .entry-content, main, #main-content");
+    function findMainContent(){
+        if(mainContent&&document.documentElement.contains(mainContent))return mainContent;
+        mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");
         return mainContent;
     }
 
-    // Secure Data Encoding/Decoding
-    function encData(s) {
-        try { return btoa(unescape(encodeURIComponent(s))); } catch (e) { return btoa(s); }
-    }
-    function decData(s) {
-        try { return decodeURIComponent(escape(atob(s))); } catch (e) { try { return atob(s); } catch (_) { return s; } }
-    }
-
-    function captureOriginalArticle() {
-        const t = findMainContent();
-        if (!t) return false;
-        if (!originalArticleCaptured) {
-            try {
-                originalArticleHTML = encData(t.innerHTML);
-            } catch (e) {
-                originalArticleHTML = t.innerHTML;
-            }
-            originalArticleCaptured = true;
-            t.setAttribute("data-ent-enc", "1");
+    function captureOriginalArticle(){
+        const t=findMainContent();
+        if(!t)return false;
+        if(!originalArticleCaptured){
+            originalArticleHTML=t.innerHTML;
+            originalArticleCaptured=true;
         }
         return true;
     }
 
-    function isGracePeriod() {
-        return (performance.now() - pageLoadStart) < 4000;
+    function nowReady(){
+        const e=performance.now()-pageLoadStart;
+        return e>=INITIAL_GRACE&&e>=ADSENSE_LOAD_GRACE;
     }
 
-    // 5. Robust Ad Verification Logic
-    function checkRealAdRender() {
-        if (isReaderMode()) return false;
-        const ads = document.querySelectorAll("ins.adsbygoogle, .adsbygoogle");
-        let rendered = false;
-        ads.forEach(ad => {
-            const ifr = ad.querySelector("iframe");
-            if (!ifr) return;
-            const r = ifr.getBoundingClientRect();
-            const st = getComputedStyle(ifr);
-            if (r.width < 10 || r.height < 10 || st.display === "none" || st.visibility === "hidden") return;
-            try {
-                const doc = ifr.contentDocument || ifr.contentWindow?.document;
-                if (!doc) return;
-                if ((doc.body?.innerHTML || "").length > 40) rendered = true;
-            } catch (e) {
-                if (ifr.src && ifr.src !== "about:blank") rendered = true;
+    const ua=(navigator.userAgent||""), uaLower=ua.toLowerCase(), vendor=(navigator.vendor||"").toLowerCase();
+    const browser={
+        soul:uaLower.includes("soul")||!!window.soul||!!window.__soul_ext__,
+        brave:!!(navigator.brave&&typeof navigator.brave.isBrave==="function"),
+        opera:uaLower.includes("opera")||uaLower.includes("opr/"),
+        chrome:!!window.chrome&&vendor.includes("google"),
+        edge:uaLower.includes("edg/"),
+        firefox:uaLower.includes("firefox"),
+        duckduckgo:/DuckDuckGo/i.test(ua)
+    };
+
+    function isEdgeOrDuck(){return /Edg\/|DuckDuckGo/i.test(ua);}
+
+    // Real Ad Render Check with Version 5 Whitelist Auto-Recovery Logic
+    function checkRealAdRender(){
+        if(isReaderMode())return false;
+        const ads=document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
+        let rendered=false;
+        ads.forEach(ad=>{
+            const ifr=ad.querySelector("iframe");
+            if(!ifr)return;
+            const r=ifr.getBoundingClientRect();
+            const st=getComputedStyle(ifr);
+            if(r.width<10||r.height<10||st.display==="none"||st.visibility==="hidden")return;
+            try{
+                const doc=ifr.contentDocument||ifr.contentWindow?.document;
+                if(!doc)return;
+                if((doc.body?.innerHTML||"").length>50)rendered=true;
+            }catch(e){
+                if(ifr.src&&ifr.src!=="about:blank")rendered=true;
             }
         });
 
-        if (rendered) {
-            legitAdRendered = true;
-            cleanStateConfirmations++;
-            if (cleanStateConfirmations >= 2) {
-                blockStateConfirmations = 0;
+        if(rendered){
+            legitAdRendered=true;
+            missingAdChecks=0;
+            if(cleanStateConfirmations<5)cleanStateConfirmations++;
+            if(cleanStateConfirmations>=3){
+                detectionScore=0;
                 restoreArticleIfNeeded();
                 unlockPage();
             }
-        } else {
-            cleanStateConfirmations = 0;
+        }else{
+            if(legitAdRendered){
+                missingAdChecks++;
+                if(missingAdChecks>=3){
+                    legitAdRendered=false;
+                    cleanStateConfirmations=0;
+                }
+            }else{
+                cleanStateConfirmations=0;
+            }
         }
         return rendered;
     }
 
-    // 6. Dynamically Generated Randomized UI Overlays (Bypasses Static Adblock Selectors)
-    const uiId = "ent-lock-" + Math.random().toString(36).substr(2, 7);
-    const styleId = "ent-style-" + Math.random().toString(36).substr(2, 7);
-    const baitId = "ent-bait-" + Math.random().toString(36).substr(2, 7);
+    // Randomized Secure UI Overlay (From Version 4)
+    function unlockPage(){
+        const o=document.getElementById("ag-lock-overlay");if(o)o.remove();
+        const o2=document.querySelector("[data-soul-lock]");if(o2)o2.remove();
+        const ls=document.getElementById("ag-lock-style");if(ls)ls.remove();
+        pageLocked=false;
+        if(document.documentElement){
+            document.documentElement.style.removeProperty("overflow");
+            document.documentElement.style.removeProperty("height");
+        }
+        if(document.body){
+            document.body.style.removeProperty("overflow");
+            document.body.style.removeProperty("height");
+        }
+    }
 
-    function createLockOverlay() {
-        if (document.getElementById(uiId)) return;
-        let st = document.getElementById(styleId);
-        if (!st) {
-            st = document.createElement("style");
-            st.id = styleId;
-            st.textContent = `
-                html.ent-locked, body.ent-locked { overflow: hidden !important; height: 100% !important; }
-                #${uiId} {
-                    position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important;
-                    background: rgba(13, 17, 23, 0.96) !important; backdrop-filter: blur(10px) !important;
-                    color: #fff !important; z-index: 2147483647 !important;
-                    display: flex !important; align-items: center !important; justify-content: center !important;
-                    padding: 20px !important; box-sizing: border-box !important;
+    function createLockOverlay(){
+        if(document.getElementById("ag-lock-overlay")||document.querySelector("[data-soul-lock]"))return;
+        const randomId="ag-"+Math.random().toString(36).substr(2,9);
+        let st=document.getElementById("ag-lock-style");
+        if(!st){
+            st=document.createElement("style");
+            st.id="ag-lock-style";
+            st.textContent=`
+                html,body{overflow:hidden!important}
+                #${randomId}{
+                    position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;
+                    background:#0d1117!important;color:#fff!important;z-index:2147483647!important;
+                    display:flex!important;align-items:center!important;justify-content:center!important;
+                    padding:20px!important;box-sizing:border-box!important;font-family:system-ui,sans-serif!important;text-align:center!important;
                 }
-                #${uiId} .ent-card {
-                    max-width: 440px !important; width: 100% !important;
-                    padding: 32px 24px !important; background: #161b22 !important;
-                    border: 1px solid #30363d !important; border-radius: 12px !important;
-                    text-align: center !important; box-shadow: 0 20px 50px rgba(0,0,0,0.8) !important;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+                #${randomId} .ag-card{
+                    width:100%!important;max-width:400px!important;padding:32px 24px!important;
+                    background:#161b22!important;border:1px solid #30363d!important;border-radius:12px!important;
                 }
-                #${uiId} .ent-card h2 { font-size: 20px !important; margin: 0 0 12px 0 !important; color: #ffffff !important; }
-                #${uiId} .ent-card p { font-size: 14px !important; color: #8b949e !important; line-height: 1.6 !important; margin: 0 !important; }
             `;
             document.head.appendChild(st);
         }
-
-        const ov = document.createElement("div");
-        ov.id = uiId;
-        ov.innerHTML = `<div class="ent-card"><h2>${CONFIG.title}</h2><p>${CONFIG.message}</p></div>`;
-        (document.body || document.documentElement).appendChild(ov);
-        document.documentElement.classList.add("ent-locked");
-        if (document.body) document.body.classList.add("ent-locked");
+        const ov=document.createElement("div");
+        ov.id=randomId;
+        ov.setAttribute("data-soul-lock","1");
+        const logo=CONFIG.logoUrl?`<img src="${CONFIG.logoUrl}" alt="Logo" style="max-width:80px;margin-bottom:16px;border-radius:8px" onerror="this.style.display='none'">`:"";
+        ov.innerHTML=`<div class="ag-card">${logo}<h1>${CONFIG.title}</h1><p>${CONFIG.message}</p></div>`;
+        (document.body||document.documentElement).appendChild(ov);
+        pageLocked=true;
     }
 
-    function unlockPage() {
-        const o = document.getElementById(uiId);
-        if (o) o.remove();
-        const st = document.getElementById(styleId);
-        if (st) st.remove();
-        document.documentElement.classList.remove("ent-locked");
-        if (document.body) document.body.classList.remove("ent-locked");
+    // Article Content Locker (Reader Mode & Adblock Protection)
+    function blockArticleIfNeeded(){
+        if(articleCurrentlyReplaced)return;
+        const t=findMainContent();
+        if(!t||!captureOriginalArticle())return;
+        try{
+            t.setAttribute("data-ag-original","1");
+            t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:50vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2 style="color:#fff;margin-bottom:12px">Content Locked</h2><p style="color:#8b949e">Please allow ads to read this article</p></div>`;
+            t.style.setProperty("display","block","important");
+            articleCurrentlyReplaced=true;
+        }catch(e){}
     }
 
-    function blockArticleIfNeeded() {
-        const t = findMainContent();
-        if (!t || !captureOriginalArticle()) return;
-        if (articleCurrentlyReplaced) return;
-        
-        try {
-            t.innerHTML = `<div style="padding:50px 20px;text-align:center;background:#0d1117;color:#fff;min-height:50vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2 style="color:#fff;margin-bottom:10px;">Content Protected</h2><p style="color:#8b949e">Please disable your ad blocker to read this article.</p></div>`;
-            t.style.setProperty("display", "block", "important");
-            articleCurrentlyReplaced = true;
-        } catch (e) {}
+    function restoreArticleIfNeeded(){
+        if(!articleCurrentlyReplaced||!originalArticleCaptured)return;
+        const t=findMainContent();
+        if(!t)return;
+        try{
+            t.innerHTML=originalArticleHTML;
+            articleCurrentlyReplaced=false;
+        }catch(e){}
     }
 
-    function restoreArticleIfNeeded() {
-        const t = findMainContent();
-        if (!t || !originalArticleCaptured) return;
-        if (!articleCurrentlyReplaced && !t.hasAttribute("data-ent-enc")) return;
-
-        try {
-            if (originalArticleHTML && originalArticleHTML.length > 20) {
-                const dec = decData(originalArticleHTML);
-                if (dec && dec.length > 20) t.innerHTML = dec;
-            }
-            t.removeAttribute("data-ent-enc");
-            articleCurrentlyReplaced = false;
-        } catch (e) {}
+    // Bait Elements for Cosmetic Filtering Detection
+    function createBaits(){
+        if(!document.body)return;
+        ["ag-ad-bait-1","ag-ad-bait-2"].forEach(id=>{
+            if(document.getElementById(id))return;
+            const b=document.createElement("div");
+            b.id=id;
+            b.className="adsbygoogle";
+            b.style.cssText="display:block!important;width:300px!important;height:250px!important;position:absolute!important;left:-9999px!important;top:-9999px!important;opacity:0.01!important;pointer-events:none!important;";
+            document.body.appendChild(b);
+        });
     }
 
-    // 7. Dynamic Bait Box for Cosmetic Hiding Traps
-    function createBaits() {
-        if (!document.body || document.getElementById(baitId)) return;
-        const b = document.createElement("div");
-        b.id = baitId;
-        b.className = "adsbygoogle";
-        b.style.cssText = "display:block!important;width:1px;height:1px;position:absolute!important;left:-9999px!important;top:-9999px!important;opacity:0!important;pointer-events:none!important;";
-        document.body.appendChild(b);
-    }
-
-    function checkCosmeticHiding() {
+    function checkCosmetic(){
         createBaits();
-        const b = document.getElementById(baitId);
-        if (!b) return false;
-        const st = getComputedStyle(b);
-        if (st.display === "none" || st.visibility === "hidden" || st.opacity === "0" && st.getPropertyValue("left").includes("-")) {
-            const rect = b.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) return true;
-        }
-        return false;
-    }
-
-    // 8. Main Heuristic Block Detection
-    function detectBlockState() {
-        if (isReaderMode()) return true;
-        if (isGracePeriod()) return false;
-        if (checkRealAdRender()) return false;
-
-        const adsbygoogleBlocked = (typeof window.adsbygoogle === "undefined" || (Array.isArray(window.adsbygoogle) && window.adsbygoogle.length === 0 && !window.adsbygoogle.loaded));
-        const cosmeticBlocked = checkCosmeticHiding();
-
-        const adElements = document.querySelectorAll("ins.adsbygoogle");
-        let hollowCount = 0;
-        adElements.forEach(el => {
-            if (el.getAttribute("data-ad-status") === "unfilled" || (el.innerHTML.trim() === "" && !legitAdRendered)) {
-                hollowCount++;
+        document.querySelectorAll("[id^='ag-ad-bait'], ins.adsbygoogle").forEach(el=>{
+            const st=getComputedStyle(el);
+            if(st.display==="none"||st.visibility==="hidden"||st.opacity==="0"){
+                detectionScore+=40;
             }
         });
+    }
 
-        if (adsbygoogleBlocked || cosmeticBlocked || (adElements.length > 0 && hollowCount >= adElements.length && !legitAdRendered)) {
-            return true;
+    function checkScriptBlock(){
+        if(document.querySelectorAll("ins.adsbygoogle").length>0 && typeof window.adsbygoogle==="undefined"){
+            detectionScore+=70;
         }
+    }
 
+    // Core Detection Heuristic
+    function detectBlockState(){
+        if(isReaderMode())return true;
+        if(!nowReady())return false;
+        if(checkRealAdRender())return false;
+
+        const isSoul=browser.soul||window.soul||!!window.__soul_ext__;
+        if(isSoul && (performance.now()-pageLoadStart)>=1500)return true;
+
+        checkScriptBlock();
+        checkCosmetic();
+
+        if(detectionScore>=40)return true;
         return false;
     }
 
-    // 9. Background Monitoring Loop
-    function evaluateProtection() {
-        if (isBloggerPreview()) return;
-
-        if (isReaderMode()) {
+    // Evaluation Loop
+    function evaluate(){
+        if(!navigator.onLine||document.readyState==="loading")return;
+        
+        if(isReaderMode()){
             blockArticleIfNeeded();
             createLockOverlay();
             return;
         }
 
-        if (detectBlockState()) {
-            blockStateConfirmations++;
-            if (blockStateConfirmations >= 2) {
-                blockArticleIfNeeded();
-                createLockOverlay();
-            }
+        if(checkRealAdRender()){
+            restoreArticleIfNeeded();
+            unlockPage();
+            return;
+        }
+
+        if(detectBlockState()){
+            blockArticleIfNeeded();
+            createLockOverlay();
         } else {
-            blockStateConfirmations = 0;
-            if (legitAdRendered || !detectBlockState()) {
+            if(articleCurrentlyReplaced && legitAdRendered){
                 restoreArticleIfNeeded();
                 unlockPage();
             }
         }
     }
 
-    // Initialization
-    function initSystem() {
+    function init(){
         captureOriginalArticle();
-        setTimeout(() => {
-            evaluateProtection();
-            setInterval(evaluateProtection, 400);
+        setTimeout(()=>{
+            evaluate();
+            setInterval(evaluate, 400); // Fast continuous background check
             setInterval(checkRealAdRender, 600);
         }, 500);
     }
 
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", initSystem, { once: true });
-    } else {
-        initSystem();
-    }
+    if(document.readyState==="loading")
+        document.addEventListener("DOMContentLoaded", init, {once:true});
+    else
+        init();
 })();
