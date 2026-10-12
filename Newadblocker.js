@@ -1,224 +1,295 @@
 (function () {
     "use strict";
-    if (window.__MERAYOUR_ADGUARD_ACTIVE__) return;
-    window.__MERAYOUR_ADGUARD_ACTIVE__ = true;
-    function isBloggerPreview(){const h=(location.hostname||"").toLowerCase();const hr=(location.href||"").toLowerCase();const s=(location.search||"").toLowerCase();const p=(location.pathname||"").toLowerCase();const rf=(document.referrer||"").toLowerCase();if(h==="blogger.com"||h.endsWith(".blogger.com")||h==="draft.blogger.com")return true;if(/(^|[\/_-])layout-preview([\/_-]|$)/i.test(p)||/(^|[\/_-])template-preview([\/_-]|$)/i.test(p))return true;if(s.includes("preview=true")||s.includes("preview=1")||s.includes("blogger.preview"))return true;if(hr.includes("blogger.com")&&(hr.includes("/layout")||hr.includes("/template")||hr.includes("/edit")))return true;if(window!==window.top&&(rf.includes("blogger.com")||rf.includes("blogspot.com")))return true;return false;}
-    if(isBloggerPreview())return;
-    function isReaderMode(){try{const href=(location.href||"").toLowerCase();if(href.startsWith("about:reader")||href.includes("moz-reader")||location.protocol==="about:")return true;if(document.documentElement.classList.contains("moz-reader-mode")||document.body.classList.contains("aboutReader")||document.querySelector(".moz-reader-content"))return true;}catch(e){}return false;}
-    const CONFIG={logoUrl:"https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh6O5yJqzqS5Y5Y5Y5Y5Y5Y5Y5/s666",title:"Ad Blocker Detected!",message:"It looks like an ad or content blocker is preventing this page from loading properly. Merayour is a free website supported by readers and advertising. Please allow ads or whitelist Merayour."};
-    const WEIGHTS={CRITICAL:70,STRONG:40,MEDIUM:30,WEAK:10};
-    let detectionScore=0,legitAdRendered=false,pageLocked=false,lastAdRenderTime=0,missingAdChecks=0;
-    const pageLoadStart=performance.now();
-    const incidentMap=new Map();
-    const evidenceMap={NETWORK:new Set(),DOM_COSMETIC:new Set(),BROWSER_ENGINE:new Set(),RESOURCE:new Set(),REMOVAL:new Set(),SCRIPT_BLOCK:new Set(),DUCKDUCKGO:new Set(),DRILL:new Set()};
-    const categoryState={NETWORK:false,DOM_COSMETIC:false,BROWSER_ENGINE:false,RESOURCE:false,REMOVAL:false,SCRIPT_BLOCK:false,DUCKDUCKGO:false,DRILL:false};
-    const INITIAL_GRACE=3000,ADSENSE_LOAD_GRACE=5000,INCIDENT_TTL=4000,INCIDENT_COOLDOWN=500;
-    let mainContent=null,originalArticleHTML=null,originalArticleCaptured=false,articleCurrentlyReplaced=false,contentState="NORMAL",cleanStateConfirmations=0,blockStateConfirmations=0,articleRestoreInProgress=false,articleBlockInProgress=false;
-    function findMainContent(){if(mainContent&&document.documentElement.contains(mainContent))return mainContent;mainContent=document.querySelector("article,.post-body,.entry-content,main,#main-content");return mainContent;}
-    function agEnc(s){try{return btoa(unescape(encodeURIComponent(s)));}catch(e){return btoa(s);}}
-    function agDec(s){try{return decodeURIComponent(escape(atob(s)));}catch(e){try{return atob(s);}catch(_){return s;}}}
-    function captureOriginalArticle(){
-        const t=findMainContent();if(!t)return false;
-        if(!originalArticleCaptured){
-            try{ originalArticleHTML=agEnc(t.innerHTML); }catch(e){ originalArticleHTML=t.innerHTML; }
-            originalArticleCaptured=true;
-            t.setAttribute("data-enc","1");
+
+    // 1. Runtime Anti-Collision & Obfuscated Global Key
+    const _rk = "_" + Math.random().toString(36).substr(2, 9) + "_";
+    if (window[_rk]) return;
+    window[_rk] = true;
+
+    // 2. Anti-Bypass: Protect window.adsbygoogle from being mocked/wiped
+    try {
+        let _agQueue = window.adsbygoogle || [];
+        Object.defineProperty(window, "adsbygoogle", {
+            get: function () { return _agQueue; },
+            set: function (v) { _agQueue = v; },
+            configurable: false
+        });
+    } catch (e) {}
+
+    // 3. Blogger & Preview Safety Check
+    function isBloggerPreview() {
+        try {
+            const h = (location.hostname || "").toLowerCase();
+            const hr = (location.href || "").toLowerCase();
+            const s = (location.search || "").toLowerCase();
+            const p = (location.pathname || "").toLowerCase();
+            const rf = (document.referrer || "").toLowerCase();
+            if (h === "blogger.com" || h.endsWith(".blogger.com") || h === "draft.blogger.com") return true;
+            if (/(^|[\/_-])layout-preview([\/_-]|$)/i.test(p) \vert{}\vert{} /(^\vert{}[\/_-])template-preview([\/_-]\vert{}$)/i.test(p)) return true;
+            if (s.includes("preview=true") || s.includes("preview=1") || s.includes("blogger.preview")) return true;
+            if (hr.includes("blogger.com") && (hr.includes("/layout") || hr.includes("/template") || hr.includes("/edit"))) return true;
+            if (window !== window.top && (rf.includes("blogger.com") || rf.includes("blogspot.com"))) return true;
+        } catch (e) {}
+        return false;
+    }
+    if (isBloggerPreview()) return;
+
+    // 4. Advanced Reader Mode Detection
+    function isReaderMode() {
+        try {
+            const href = (location.href || "").toLowerCase();
+            if (href.startsWith("about:reader") || href.includes("moz-reader") || location.protocol === "about:") return true;
+            if (document.documentElement.classList.contains("moz-reader-mode") || document.body.classList.contains("aboutReader") || document.querySelector(".moz-reader-content")) return true;
+            if (window.screen && window.innerWidth < 400 && document.body && document.body.innerText && document.body.innerText.length > 500 && document.querySelectorAll("ins.adsbygoogle").length === 0) {
+                if (document.querySelectorAll("header, footer, nav").length === 0) return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    const CONFIG = {
+        title: "Ad Blocker Detected!",
+        message: "It looks like an ad or content blocker is active. This website relies on ads to stay free for everyone. Please whitelist this site or disable your ad blocker to view the content."
+    };
+
+    let legitAdRendered = false;
+    let cleanStateConfirmations = 0;
+    let blockStateConfirmations = 0;
+    const pageLoadStart = performance.now();
+
+    let mainContent = null;
+    let originalArticleHTML = null;
+    let originalArticleCaptured = false;
+    let articleCurrentlyReplaced = false;
+
+    function findMainContent() {
+        if (mainContent && document.documentElement.contains(mainContent)) return mainContent;
+        mainContent = document.querySelector("article, .post-body, .entry-content, main, #main-content");
+        return mainContent;
+    }
+
+    // Secure Data Encoding/Decoding
+    function encData(s) {
+        try { return btoa(unescape(encodeURIComponent(s))); } catch (e) { return btoa(s); }
+    }
+    function decData(s) {
+        try { return decodeURIComponent(escape(atob(s))); } catch (e) { try { return atob(s); } catch (_) { return s; } }
+    }
+
+    function captureOriginalArticle() {
+        const t = findMainContent();
+        if (!t) return false;
+        if (!originalArticleCaptured) {
+            try {
+                originalArticleHTML = encData(t.innerHTML);
+            } catch (e) {
+                originalArticleHTML = t.innerHTML;
+            }
+            originalArticleCaptured = true;
+            t.setAttribute("data-ent-enc", "1");
         }
         return true;
     }
-    function nowReady(){return performance.now()-pageLoadStart>=INITIAL_GRACE+ADSENSE_LOAD_GRACE;}
-    const ua=(navigator.userAgent||""),uaLower=ua.toLowerCase(),vendor=(navigator.vendor||"").toLowerCase();
-    const browser={soul:uaLower.includes("soul")||!!window.soul||!!window.__soul_ext__,brave:!!(navigator.brave&&typeof navigator.brave.isBrave==="function"),opera:uaLower.includes("opera")||uaLower.includes("opr/"),chrome:!!window.chrome&&vendor.includes("google"),edge:uaLower.includes("edg/"),firefox:uaLower.includes("firefox"),duckduckgo:/DuckDuckGo/i.test(ua)};
-    function isEdgeOrDuck(){return /Edg\/|DuckDuckGo/i.test(ua);}
-    setInterval(()=>{const n=performance.now();incidentMap.forEach((ts,id)=>{if(n-ts>4000)incidentMap.delete(id)});},1000);
-    function clearEvidence(){detectionScore=0;incidentMap.clear();Object.keys(categoryState).forEach(k=>categoryState[k]=false);Object.keys(evidenceMap).forEach(k=>evidenceMap[k].clear());}
-    // UPGRADE: Continuous Detect Power
-    function checkRealAdRender(){
-        if(isReaderMode())return false;
-        const ads=document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
-        let rendered=false;
-        ads.forEach(ad=>{
-            const ifr=ad.querySelector("iframe");if(!ifr)return;
-            const r=ifr.getBoundingClientRect();const st=getComputedStyle(ifr);
-            if(r.width<10||r.height<10||st.display==="none"||st.visibility==="hidden")return;
-            try{const doc=ifr.contentDocument||ifr.contentWindow?.document;if(!doc)return;if((doc.body?.innerHTML||"").length>100)rendered=true;}catch(e){if(ifr.src&&ifr.src!=="about:blank")rendered=true;}
+
+    function isGracePeriod() {
+        return (performance.now() - pageLoadStart) < 4000;
+    }
+
+    // 5. Robust Ad Verification Logic
+    function checkRealAdRender() {
+        if (isReaderMode()) return false;
+        const ads = document.querySelectorAll("ins.adsbygoogle, .adsbygoogle");
+        let rendered = false;
+        ads.forEach(ad => {
+            const ifr = ad.querySelector("iframe");
+            if (!ifr) return;
+            const r = ifr.getBoundingClientRect();
+            const st = getComputedStyle(ifr);
+            if (r.width < 10 || r.height < 10 || st.display === "none" || st.visibility === "hidden") return;
+            try {
+                const doc = ifr.contentDocument || ifr.contentWindow?.document;
+                if (!doc) return;
+                if ((doc.body?.innerHTML || "").length > 40) rendered = true;
+            } catch (e) {
+                if (ifr.src && ifr.src !== "about:blank") rendered = true;
+            }
         });
-        if(rendered){
-            legitAdRendered=true;lastAdRenderTime=performance.now();missingAdChecks=0;
-            if(cleanStateConfirmations<10)cleanStateConfirmations++;
-            if(cleanStateConfirmations>=10){clearEvidence();blockStateConfirmations=0;restoreArticleIfNeeded();unlockPage();}
-        }else{
-            if(legitAdRendered){
-                missingAdChecks++;
-                if(missingAdChecks>=2){ // 4 से 2 - Brave/Soul Fast Re-Detect
-                    legitAdRendered=false;
-                    cleanStateConfirmations=0;
-                    detectionScore=0;
-                    blockStateConfirmations=0;
-                    setTimeout(evaluate,100);
-                }
-            }else{cleanStateConfirmations=0;}
+
+        if (rendered) {
+            legitAdRendered = true;
+            cleanStateConfirmations++;
+            if (cleanStateConfirmations >= 2) {
+                blockStateConfirmations = 0;
+                restoreArticleIfNeeded();
+                unlockPage();
+            }
+        } else {
+            cleanStateConfirmations = 0;
         }
         return rendered;
     }
-    function unlockPage(){
-        const o=document.getElementById("ag-lock-overlay");if(o)o.remove();
-        const o2=document.querySelector("[data-soul-lock]");if(o2)o2.remove();
-        const ls=document.getElementById("ag-lock-style");if(ls)ls.remove();
-        pageLocked=false;
-        if(document.documentElement)document.documentElement.style.removeProperty("overflow");
-        if(document.body)document.body.style.removeProperty("overflow");
-    }
-    // UPGRADE: Popup 100% Center Fix
-    function createLockOverlay(){
-        if(document.getElementById("ag-lock-overlay")||document.querySelector("[data-soul-lock]"))return;
-        const randomId="ag-"+Math.random().toString(36).substr(2,9);
-        let st=document.getElementById("ag-lock-style");
-        if(!st){
-            st=document.createElement("style");st.id="ag-lock-style";
-            st.textContent=`
-                html,body{overflow:hidden!important}
-                #${randomId}{
-                    position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;
-                    background:#0d1117!important;color:#fff!important;z-index:2147483647!important;
-                    display:flex!important;align-items:center!important;justify-content:center!important;
-                    padding:20px!important;box-sizing:border-box!important;
+
+    // 6. Dynamically Generated Randomized UI Overlays (Bypasses Static Adblock Selectors)
+    const uiId = "ent-lock-" + Math.random().toString(36).substr(2, 7);
+    const styleId = "ent-style-" + Math.random().toString(36).substr(2, 7);
+    const baitId = "ent-bait-" + Math.random().toString(36).substr(2, 7);
+
+    function createLockOverlay() {
+        if (document.getElementById(uiId)) return;
+        let st = document.getElementById(styleId);
+        if (!st) {
+            st = document.createElement("style");
+            st.id = styleId;
+            st.textContent = `
+                html.ent-locked, body.ent-locked { overflow: hidden !important; height: 100% !important; }
+                #${uiId} {
+                    position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important;
+                    background: rgba(13, 17, 23, 0.96) !important; backdrop-filter: blur(10px) !important;
+                    color: #fff !important; z-index: 2147483647 !important;
+                    display: flex !important; align-items: center !important; justify-content: center !important;
+                    padding: 20px !important; box-sizing: border-box !important;
                 }
-                #${randomId}.ag-card{
-                    max-width:460px!important;width:100%!important;
-                    padding:32px 24px!important;background:#161b22!important;
-                    border:1px solid #30363d!important;border-radius:12px!important;
-                    text-align:center!important;box-shadow:0 8px 32px rgba(0,0,0,0.5)!important;
-                    margin:auto!important;display:block!important;
+                #${uiId} .ent-card {
+                    max-width: 440px !important; width: 100% !important;
+                    padding: 32px 24px !important; background: #161b22 !important;
+                    border: 1px solid #30363d !important; border-radius: 12px !important;
+                    text-align: center !important; box-shadow: 0 20px 50px rgba(0,0,0,0.8) !important;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
                 }
-                #${randomId}.ag-card h1{font-size:22px!important;margin:0 0 12px 0!important;color:#fff!important;text-align:center!important}
-                #${randomId}.ag-card p{font-size:14px!important;color:#8b949e!important;line-height:1.5!important;text-align:center!important}
+                #${uiId} .ent-card h2 { font-size: 20px !important; margin: 0 0 12px 0 !important; color: #ffffff !important; }
+                #${uiId} .ent-card p { font-size: 14px !important; color: #8b949e !important; line-height: 1.6 !important; margin: 0 !important; }
             `;
             document.head.appendChild(st);
         }
-        const ov=document.createElement("div");ov.id=randomId;ov.setAttribute("data-soul-lock","1");
-        ov.innerHTML=`<div class="ag-card"><h1>${CONFIG.title}</h1><p>${CONFIG.message}</p></div>`;
-        (document.body||document.documentElement).appendChild(ov);
+
+        const ov = document.createElement("div");
+        ov.id = uiId;
+        ov.innerHTML = `<div class="ent-card"><h2>${CONFIG.title}</h2><p>${CONFIG.message}</p></div>`;
+        (document.body || document.documentElement).appendChild(ov);
+        document.documentElement.classList.add("ent-locked");
+        if (document.body) document.body.classList.add("ent-locked");
     }
-    function blockArticleIfNeeded(){
-        if(articleBlockInProgress)return;
-        const t=findMainContent();if(!t||!captureOriginalArticle())return;
-        if(articleCurrentlyReplaced &&!browser.firefox) return;
-        articleBlockInProgress=true;
-        try{
-            t.setAttribute("data-ag-original","1");
-            if(browser.firefox){
-                t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2 style="color:#fff">Loading Content...</h2><p style="color:#8b949e">Please wait</p></div>`;
-            } else {
-                t.innerHTML=`<div style="padding:40px 20px;text-align:center;background:#0d1117;color:#fff;min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2>Content Locked</h2><p style="color:#8b949e">Please allow ads to read this article</p></div>`;
+
+    function unlockPage() {
+        const o = document.getElementById(uiId);
+        if (o) o.remove();
+        const st = document.getElementById(styleId);
+        if (st) st.remove();
+        document.documentElement.classList.remove("ent-locked");
+        if (document.body) document.body.classList.remove("ent-locked");
+    }
+
+    function blockArticleIfNeeded() {
+        const t = findMainContent();
+        if (!t || !captureOriginalArticle()) return;
+        if (articleCurrentlyReplaced) return;
+        
+        try {
+            t.innerHTML = `<div style="padding:50px 20px;text-align:center;background:#0d1117;color:#fff;min-height:50vh;display:flex;flex-direction:column;align-items:center;justify-content:center"><h2 style="color:#fff;margin-bottom:10px;">Content Protected</h2><p style="color:#8b949e">Please disable your ad blocker to read this article.</p></div>`;
+            t.style.setProperty("display", "block", "important");
+            articleCurrentlyReplaced = true;
+        } catch (e) {}
+    }
+
+    function restoreArticleIfNeeded() {
+        const t = findMainContent();
+        if (!t || !originalArticleCaptured) return;
+        if (!articleCurrentlyReplaced && !t.hasAttribute("data-ent-enc")) return;
+
+        try {
+            if (originalArticleHTML && originalArticleHTML.length > 20) {
+                const dec = decData(originalArticleHTML);
+                if (dec && dec.length > 20) t.innerHTML = dec;
             }
-            t.style.setProperty("display","block","important");
-            articleCurrentlyReplaced=true;contentState="BLOCKED";
-        }finally{articleBlockInProgress=false;}
+            t.removeAttribute("data-ent-enc");
+            articleCurrentlyReplaced = false;
+        } catch (e) {}
     }
-    function restoreArticleIfNeeded(){
-        const t=findMainContent();if(!t||!originalArticleCaptured)return;
-        if(articleRestoreInProgress)return;
-        if(!articleCurrentlyReplaced &&!t.hasAttribute("data-enc")) return;
-        articleRestoreInProgress=true;
-        try{
-            if(originalArticleHTML && originalArticleHTML.length>50){
-                const dec=agDec(originalArticleHTML);
-                if(dec && dec.length>50) t.innerHTML=dec;
-            }
-            t.removeAttribute("data-enc");t.removeAttribute("data-firefox-decoy");
-            articleCurrentlyReplaced=false;contentState="NORMAL";
-        }finally{articleRestoreInProgress=false;}
+
+    // 7. Dynamic Bait Box for Cosmetic Hiding Traps
+    function createBaits() {
+        if (!document.body || document.getElementById(baitId)) return;
+        const b = document.createElement("div");
+        b.id = baitId;
+        b.className = "adsbygoogle";
+        b.style.cssText = "display:block!important;width:1px;height:1px;position:absolute!important;left:-9999px!important;top:-9999px!important;opacity:0!important;pointer-events:none!important;";
+        document.body.appendChild(b);
     }
-    const PROBE_CONFIG={MAX_CYCLES:3,MIN_INTERVAL:1500,START_AFTER:2000,MAX_TOTAL_REQUESTS:10,TIMEOUT:2500,MAX_LIFETIME:60000};
-    const probeState={cycles:0,pixelAttempts:0,pixelFailures:0,fetchAttempts:0,fetchFailures:0,consecutivePixelFailures:0,consecutiveFetchFailures:0,consecutiveDualFailures:0,lastProbeTime:0,stopped:false,networkSuspicion:0};
-    function probeAllowed(){if(isReaderMode()||probeState.stopped||legitAdRendered||!navigator.onLine)return false;if(performance.now()-pageLoadStart<2000)return false;if(probeState.cycles>=3)return false;if(performance.now()-probeState.lastProbeTime<1500)return false;return true;}
-    function updateProbeSuspicion(){let s=0;if(probeState.consecutivePixelFailures>=1)s++;if(probeState.consecutiveFetchFailures>=1)s++;if(probeState.consecutiveDualFailures>=1)s++;probeState.networkSuspicion=s;if(s>=1){categoryState.NETWORK=true;}}
-    function runPixelProbe(){return new Promise(res=>{probeState.pixelAttempts++;const px=new Image();let done=false;const tm=setTimeout(()=>{if(done)return;done=true;probeState.pixelFailures++;probeState.consecutivePixelFailures++;res(false);},2500);px.onload=()=>{if(done)return;done=true;clearTimeout(tm);probeState.consecutivePixelFailures=0;res(true);};px.onerror=()=>{if(done)return;done=true;clearTimeout(tm);probeState.pixelFailures++;probeState.consecutivePixelFailures++;res(false);};px.src="https://pagead2.googlesyndication.com/pagead/img/0.gif?ag="+Date.now();});}
-    async function runFetchProbe(){if(!window.fetch)return false;probeState.fetchAttempts++;try{await fetch("https://pagead2.googlesyndication.com/pagead/img/0.gif?ag="+Date.now(),{mode:"no-cors",cache:"no-store"});probeState.consecutiveFetchFailures=0;return true;}catch(e){probeState.fetchFailures++;probeState.consecutiveFetchFailures++;return false;}}
-    async function runProbeCycle(){if(!probeAllowed())return;probeState.lastProbeTime=performance.now();probeState.cycles++;const [p,f]=await Promise.all([runPixelProbe(),runFetchProbe()]);if(!p&&!f)probeState.consecutiveDualFailures++;else probeState.consecutiveDualFailures=0;updateProbeSuspicion();evaluate();}
-    function registerIncident(id,conf,cat,src){if(isReaderMode()||!cat)return;const n=performance.now();if(incidentMap.has(id)&&n-incidentMap.get(id)<500)return;incidentMap.set(id,n);detectionScore+=(WEIGHTS[conf]||10);categoryState[cat]=true;evidenceMap[cat].add(src||id);detectionScore+=10;setTimeout(evaluate,100);}
-    function createBaits(){if(!document.body)return;["ag-ad-bait-1","ag-ad-bait-2","ag-ad-bait-3"].forEach(id=>{if(document.getElementById(id))return;const b=document.createElement("div");b.id=id;b.dataset.agBait="true";b.className="adsbygoogle";b.style.cssText="display:block!important;width:300px;height:250px;position:absolute;left:0;top:0;opacity:0.01;pointer-events:none;z-index:-1;";(document.body||document.documentElement).appendChild(b);});}
-    function checkCosmetic(){
-        if(isReaderMode()){blockArticleIfNeeded();createLockOverlay();return;}
+
+    function checkCosmeticHiding() {
         createBaits();
-        document.querySelectorAll("[data-ag-bait],ins.adsbygoogle,.adsbygoogle").forEach(el=>{
-            const st=getComputedStyle(el);
-            if(st.display==="none"||st.visibility==="hidden"){
-                const h=parseInt(el.dataset.hits||"0",10)+1;el.dataset.hits=String(h);
-                if(h>=3)registerIncident("bait:"+el.id,"STRONG","DOM_COSMETIC",el.id);
-            }else el.dataset.hits="0";
-        });
-    }
-    function checkBrowserSignals(){let sc=0;if(browser.soul)sc+=50;if(window.soul||window.__soul_ext__)sc+=50;if(browser.brave)sc+=50;if(browser.opera)sc+=50;if(browser.duckduckgo)sc+=50;if(browser.firefox)sc+=20;if(browser.edge)sc+=50;if(sc>=10)registerIncident("browser:strong","STRONG","BROWSER_ENGINE","browser_strong");}
-    function checkScriptBlock(){if(document.querySelectorAll("ins.adsbygoogle").length===0)return false;if(typeof window.adsbygoogle==="undefined"){registerIncident("script:blocked","CRITICAL","SCRIPT_BLOCK","adsbygoogle_blocked");return true;}return false;}
-    function checkEdgeDuckForce(){if(!isEdgeOrDuck()||!nowReady()||legitAdRendered)return false;if(!checkRealAdRender()){registerIncident("drill:edge_duck","CRITICAL","DRILL","edge_duck_force");return true;}return false;}
-    window.addEventListener("error",function(e){const src=e.target?.src||"";if(/googlesyndication|pagead2/i.test(src))registerIncident("resource:"+src,"STRONG","RESOURCE","resource_error");},true);
-    (function(){const obs=new MutationObserver(muts=>{muts.forEach(m=>{m.removedNodes.forEach(n=>{if(n.nodeType===1&&(n.classList.contains("adsbygoogle")||n.querySelector?.(".adsbygoogle")))registerIncident("removed:ad","STRONG","REMOVAL","ad_removal");});});});obs.observe(document.documentElement,{childList:true,subtree:true});})();
-    function detectBlockState(){
-        if(isReaderMode())return true;
-        const allAds=document.querySelectorAll("ins.adsbygoogle,.adsbygoogle");
-        if(allAds.length===0) return false;
-        if(browser.firefox &&!legitAdRendered && nowReady()){
-            if(typeof window.adsbygoogle==="undefined") return true;
-            if(!checkRealAdRender()) return true;
-            return false;
+        const b = document.getElementById(baitId);
+        if (!b) return false;
+        const st = getComputedStyle(b);
+        if (st.display === "none" || st.visibility === "hidden" || st.opacity === "0" && st.getPropertyValue("left").includes("-")) {
+            const rect = b.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return true;
         }
-        const isSoul=browser.soul||window.soul||!!window.__soul_ext__;
-        if(isSoul){if(legitAdRendered)return false;if(document.querySelector('ins.adsbygoogle[data-ad-status]'))return false;if(performance.now()-pageLoadStart>=1500)return true;}
-        if(legitAdRendered)return false;if(!nowReady())return false;if(checkRealAdRender())return false;
-        if(document.querySelector('ins.adsbygoogle[data-ad-status]'))return false;
-        if(checkEdgeDuckForce()){blockStateConfirmations++; if(blockStateConfirmations>=2) return true; else return false;}
-        checkScriptBlock();checkCosmetic();checkBrowserSignals();
-        const hasHollow=(()=>{
-            const ifr=document.querySelectorAll("ins.adsbygoogle iframe");
-            if(ifr.length===0) return false;
-            for(const i of ifr){try{if(i.contentDocument&&i.contentDocument.body.innerHTML.length<50)return true;}catch(e){return false;}}
-            return false;
-        })();
-        if(hasHollow)return true;
-        if(detectionScore>=80)return true;
         return false;
     }
-    // UPGRADE: Power Mode - Never Stop Checking
-    function evaluate(){
-        if(isReaderMode()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;return;}
-        if(browser.firefox &&!legitAdRendered && nowReady()){
-            if(!checkRealAdRender()){
-                blockArticleIfNeeded();createLockOverlay();pageLocked=true;return;
+
+    // 8. Main Heuristic Block Detection
+    function detectBlockState() {
+        if (isReaderMode()) return true;
+        if (isGracePeriod()) return false;
+        if (checkRealAdRender()) return false;
+
+        const adsbygoogleBlocked = (typeof window.adsbygoogle === "undefined" || (Array.isArray(window.adsbygoogle) && window.adsbygoogle.length === 0 && !window.adsbygoogle.loaded));
+        const cosmeticBlocked = checkCosmeticHiding();
+
+        const adElements = document.querySelectorAll("ins.adsbygoogle");
+        let hollowCount = 0;
+        adElements.forEach(el => {
+            if (el.getAttribute("data-ad-status") === "unfilled" || (el.innerHTML.trim() === "" && !legitAdRendered)) {
+                hollowCount++;
             }
+        });
+
+        if (adsbygoogleBlocked || cosmeticBlocked || (adElements.length > 0 && hollowCount >= adElements.length && !legitAdRendered)) {
+            return true;
         }
-        if(!navigator.onLine||document.readyState==="loading")return;
-        if(checkRealAdRender()){
-            restoreArticleIfNeeded();
-            if(cleanStateConfirmations>=1) unlockPage();
-            // return हटाया - Detection चलता रहेगा
-        }
-        if(!nowReady()){
-            // Grace में भी Soul/Brave को Check करो
-            if(browser.soul||browser.brave||browser.duckduckgo){
-                if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;}
-            }
+
+        return false;
+    }
+
+    // 9. Background Monitoring Loop
+    function evaluateProtection() {
+        if (isBloggerPreview()) return;
+
+        if (isReaderMode()) {
+            blockArticleIfNeeded();
+            createLockOverlay();
             return;
         }
-        if(articleCurrentlyReplaced){
-            if(legitAdRendered){restoreArticleIfNeeded();unlockPage();return;}
-            createLockOverlay();return;
-        }
-        if(detectBlockState()){blockArticleIfNeeded();createLockOverlay();pageLocked=true;}
-        else {
-            if(originalArticleHTML) restoreArticleIfNeeded();
-            if(legitAdRendered) unlockPage();
+
+        if (detectBlockState()) {
+            blockStateConfirmations++;
+            if (blockStateConfirmations >= 2) {
+                blockArticleIfNeeded();
+                createLockOverlay();
+            }
+        } else {
+            blockStateConfirmations = 0;
+            if (legitAdRendered || !detectBlockState()) {
+                restoreArticleIfNeeded();
+                unlockPage();
+            }
         }
     }
-    function init(){
+
+    // Initialization
+    function initSystem() {
         captureOriginalArticle();
-        setTimeout(()=>{
-            evaluate();
-            setInterval(evaluate,300); // 500 से 300 - Fast Detect
-            setInterval(checkRealAdRender,400); // नया - Brave/Soul Continuous
-            setInterval(runProbeCycle,1500); // 2000 से 1500
-        },300);
+        setTimeout(() => {
+            evaluateProtection();
+            setInterval(evaluateProtection, 400);
+            setInterval(checkRealAdRender, 600);
+        }, 500);
     }
-    if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initSystem, { once: true });
+    } else {
+        initSystem();
+    }
 })();
