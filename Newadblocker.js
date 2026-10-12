@@ -1,295 +1,380 @@
- <script>
 (function () {
   "use strict";
 
-  if (window.__MERAYOUR_ADGUARD_V2__) return;
-  window.__MERAYOUR_ADGUARD_V2__ = true;
+  if (window.__MERAYOUR_ADGUARD_V9__) return;
+  window.__MERAYOUR_ADGUARD_V9__ = true;
 
   const CONFIG = {
-    GRACE_TIME: 5000,
-    CHECK_INTERVAL: 1000,
-    REQUIRED_CONFIRMATIONS: 3,
-
-    TITLE: "Please Support Merayour",
-
-    MESSAGE:
-      "Merayour is a free website supported by advertising. " +
-      "Please allow ads on this site to continue reading."
+    INITIAL_GRACE: 5000,
+    AD_PENDING_GRACE: 12000,
+    CONFIRMATION_TIME: 7000,
+    CHECK_INTERVAL: 1000
   };
 
   const state = {
-    startedAt: Date.now(),
-    scripts: new Set(),
-    loadedScripts: new Set(),
-    failedScripts: new Set(),
-    confirmations: 0,
+    analyticsDetected: false,
+    analyticsFailed: false,
+    adsenseDetected: false,
+    adsenseFailed: false,
+    adsenseLoaded: false,
+    firstCheckComplete: false,
+    lockStartedAt: 0,
     locked: false,
     overlay: null,
-    interval: null,
-    observer: null
+    pendingSince: 0
   };
 
-  function isPreview() {
-    const host = location.hostname.toLowerCase();
+  const startedAt = Date.now();
+
+  function isBloggerPreview() {
     const url = location.href.toLowerCase();
 
     return (
-      host === "draft.blogger.com" ||
-      host === "blogger.com" ||
-      url.includes("/blog/post/edit/") ||
-      url.includes("/blog/post/preview/")
+      url.includes("blogger.com/blogger.g") ||
+      url.includes("blogger.googleusercontent.com") ||
+      url.includes("view=preview")
     );
   }
 
-  if (isPreview()) return;
+  if (isBloggerPreview()) return;
 
-  function isAdSenseScript(script) {
-    if (!script || !script.src) return false;
+  function getScriptType(src) {
+    if (!src) return "";
 
-    try {
-      const url = new URL(script.src, location.href);
+    const value = src.toLowerCase();
 
-      return (
-        url.hostname === "pagead2.googlesyndication.com" &&
-        url.pathname.includes("/pagead/js/adsbygoogle.js")
-      );
-    } catch (e) {
-      return false;
+    if (
+      value.includes("pagead2.googlesyndication.com/pagead/js/adsbygoogle.js") ||
+      value.includes("googleads.g.doubleclick.net/pagead/ads") ||
+      value.includes("googlesyndication.com/pagead/")
+    ) {
+      return "adsense";
     }
+
+    if (
+      value.includes("googletagmanager.com/gtag/js") ||
+      value.includes("googletagmanager.com/gtm.js") ||
+      value.includes("google-analytics.com/analytics.js") ||
+      value.includes("google-analytics.com/ga.js") ||
+      value.includes("google-analytics.com/g/collect") ||
+      value.includes("analytics.google.com/g/collect")
+    ) {
+      return "analytics";
+    }
+
+    return "";
   }
 
-  /*
-   * Register listeners on each AdSense script.
-   * This detector must be placed before the AdSense tags.
-   */
-  function watchScript(script) {
-    if (!isAdSenseScript(script)) return;
-    if (state.scripts.has(script)) return;
+  function inspectExistingScripts() {
+    document.querySelectorAll("script[src]").forEach(function (script) {
+      const type = getScriptType(script.src);
 
-    state.scripts.add(script);
-
-    script.addEventListener("load", function () {
-      state.loadedScripts.add(script);
-      state.failedScripts.delete(script);
-      state.confirmations = 0;
-      check();
-    });
-
-    script.addEventListener("error", function () {
-      if (!state.loadedScripts.has(script)) {
-        state.failedScripts.add(script);
+      if (type === "adsense") {
+        state.adsenseDetected = true;
       }
 
-      check();
+      if (type === "analytics") {
+        state.analyticsDetected = true;
+      }
     });
   }
 
   /*
-   * Capture resource errors as early as possible.
+   * Capture resource-loading errors.
+   * This listener must be installed before the monitored scripts load.
    */
   window.addEventListener("error", function (event) {
     const target = event.target;
 
-    if (!target || target.tagName !== "SCRIPT") return;
-    if (!isAdSenseScript(target)) return;
+    if (!target || !target.src) return;
 
-    if (!state.loadedScripts.has(target)) {
-      state.failedScripts.add(target);
+    const type = getScriptType(target.src);
+
+    if (type === "adsense") {
+      state.adsenseDetected = true;
+      state.adsenseFailed = true;
+    }
+
+    if (type === "analytics") {
+      state.analyticsDetected = true;
+      state.analyticsFailed = true;
     }
   }, true);
 
   /*
-   * Discover scripts already present and scripts
-   * inserted later by the page.
+   * Track scripts inserted after this monitor starts.
    */
-  function scanScripts() {
-    document.querySelectorAll("script[src]").forEach(watchScript);
+  function watchScript(script) {
+    if (!script || !script.src) return;
+
+    const type = getScriptType(script.src);
+
+    if (type === "adsense") {
+      state.adsenseDetected = true;
+
+      script.addEventListener("load", function () {
+        state.adsenseLoaded = true;
+      }, { once: true });
+
+      script.addEventListener("error", function () {
+        state.adsenseFailed = true;
+      }, { once: true });
+    }
+
+    if (type === "analytics") {
+      state.analyticsDetected = true;
+
+      script.addEventListener("error", function () {
+        state.analyticsFailed = true;
+      }, { once: true });
+    }
   }
 
-  scanScripts();
+  function watchNewScripts() {
+    if (!document.documentElement) return;
 
-  state.observer = new MutationObserver(function (mutations) {
-    mutations.forEach(function (mutation) {
-      mutation.addedNodes.forEach(function (node) {
-        if (node.nodeType !== 1) return;
+    const observer = new MutationObserver(function (records) {
+      records.forEach(function (record) {
+        record.addedNodes.forEach(function (node) {
+          if (!node || node.nodeType !== 1) return;
 
-        if (node.tagName === "SCRIPT") {
-          watchScript(node);
-        }
+          if (node.tagName === "SCRIPT") {
+            watchScript(node);
+          }
 
-        if (node.querySelectorAll) {
-          node.querySelectorAll("script[src]").forEach(watchScript);
-        }
+          if (node.querySelectorAll) {
+            node.querySelectorAll("script[src]").forEach(watchScript);
+          }
+        });
       });
     });
-  });
 
-  state.observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true
-  });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+  }
 
-  /*
-   * Look for genuine AdSense slots and rendered frames.
-   */
-  function isVisible(element) {
-    if (!element) return false;
-
-    const rect = element.getBoundingClientRect();
-    const style = getComputedStyle(element);
-
-    return (
-      rect.width > 20 &&
-      rect.height > 20 &&
-      style.display !== "none" &&
-      style.visibility !== "hidden" &&
-      Number(style.opacity) > 0
+  function getAdSlots() {
+    return Array.from(
+      document.querySelectorAll("ins.adsbygoogle")
     );
   }
 
-  function hasRenderedAd() {
-    const slots = document.querySelectorAll("ins.adsbygoogle");
+  function hasFilledAd() {
+    const slots = getAdSlots();
 
-    for (const slot of slots) {
-      const status = (
-        slot.getAttribute("data-ad-status") || ""
-      ).toLowerCase();
-
-      if (status === "filled" && isVisible(slot)) {
+    return slots.some(function (slot) {
+      if (slot.getAttribute("data-ad-status") === "filled") {
         return true;
       }
 
-      const frames = slot.querySelectorAll("iframe");
+      /*
+       * A rendered iframe inside a real AdSense slot is
+       * supporting evidence, not a fabricated test element.
+       */
+      const iframe = slot.querySelector("iframe");
 
-      for (const frame of frames) {
-        if (isVisible(frame)) {
-          return true;
-        }
+      if (iframe) {
+        const rect = iframe.getBoundingClientRect();
+
+        return rect.width > 1 && rect.height > 1;
       }
-    }
 
-    return false;
+      return false;
+    });
   }
 
-  function showLock() {
-    if (state.locked || !document.body) return;
+  function hasPendingAdSlot() {
+    const slots = getAdSlots();
 
-    state.locked = true;
+    return slots.some(function (slot) {
+      const status = slot.getAttribute("data-ad-status");
+
+      /*
+       * An explicitly unfilled slot is not treated as
+       * proof of ad blocking.
+       */
+      if (status === "unfilled") return false;
+
+      if (status === "filled") return false;
+
+      return true;
+    });
+  }
+
+  function createOverlay() {
+    if (state.overlay) return;
 
     const overlay = document.createElement("div");
 
-    overlay.id = "merayour-adguard-lock";
+    overlay.id = "merayour-adguard-notice";
 
-    overlay.style.cssText =
-      "position:fixed;inset:0;z-index:2147483647;" +
-      "display:flex;align-items:center;justify-content:center;" +
-      "padding:20px;box-sizing:border-box;" +
-      "background:rgba(5,8,15,.97);color:#fff;" +
-      "font-family:Arial,Helvetica,sans-serif;text-align:center;";
+    overlay.style.cssText = [
+      "position:fixed",
+      "inset:0",
+      "z-index:2147483647",
+      "background:rgba(10,10,15,.97)",
+      "color:#fff",
+      "display:flex",
+      "align-items:center",
+      "justify-content:center",
+      "padding:24px",
+      "box-sizing:border-box",
+      "font-family:Arial,sans-serif",
+      "text-align:center"
+    ].join(";");
 
-    const card = document.createElement("div");
+    overlay.innerHTML = `
+      <div style="
+        max-width:520px;
+        width:100%;
+        padding:28px 22px;
+        border:1px solid #a52b35;
+        border-radius:12px;
+        background:#15151d;
+        box-shadow:0 0 35px rgba(165,43,53,.18);
+      ">
+        <h2 style="
+          color:#ff5964;
+          font-size:25px;
+          line-height:1.3;
+          margin:0 0 16px;
+        ">Please Check Your Ad Settings</h2>
 
-    card.style.cssText =
-      "max-width:440px;width:100%;padding:28px 22px;" +
-      "box-sizing:border-box;background:#101827;" +
-      "border:1px solid #30445d;border-radius:14px;";
+        <p style="
+          color:#e3e3e8;
+          font-size:16px;
+          line-height:1.7;
+          margin:0 0 18px;
+        ">
+          Merayour relies on advertising to support its stories.
+          Our checks could not confirm that the required services
+          are working. If you use an ad blocker, please allow ads
+          on this site and reload the page.
+        </p>
 
-    const title = document.createElement("h2");
-    title.textContent = CONFIG.TITLE;
-    title.style.cssText =
-      "font-size:25px;line-height:1.3;margin:0 0 14px;";
+        <button id="merayour-adguard-recheck" type="button" style="
+          background:#b92f3b;
+          color:#fff;
+          border:0;
+          border-radius:6px;
+          padding:13px 20px;
+          font-size:15px;
+          font-weight:bold;
+          cursor:pointer;
+        ">I've Allowed Ads — Reload Page</button>
 
-    const message = document.createElement("p");
-    message.textContent = CONFIG.MESSAGE;
-    message.style.cssText =
-      "font-size:16px;line-height:1.7;color:#d1d8e5;";
+        <p style="
+          color:#aaaab5;
+          font-size:12px;
+          line-height:1.5;
+          margin:15px 0 0;
+        ">
+          If you do not use an ad blocker, try reloading the page.
+          A network or browser privacy setting can sometimes affect
+          these checks.
+        </p>
+      </div>
+    `;
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "I've Enabled Ads — Refresh";
-    button.style.cssText =
-      "width:100%;padding:14px;border:0;border-radius:8px;" +
-      "background:#16b8d4;color:#06111c;font-weight:bold;" +
-      "font-size:15px;cursor:pointer;";
+    document.body.appendChild(overlay);
+
+    const button = overlay.querySelector(
+      "#merayour-adguard-recheck"
+    );
 
     button.addEventListener("click", function () {
       location.reload();
     });
 
-    card.appendChild(title);
-    card.appendChild(message);
-    card.appendChild(button);
-    overlay.appendChild(card);
-
-    document.body.appendChild(overlay);
     state.overlay = overlay;
+    state.locked = true;
   }
 
-  function removeLock() {
-    state.locked = false;
-    state.confirmations = 0;
-
+  function removeOverlay() {
     if (state.overlay) {
       state.overlay.remove();
-      state.overlay = null;
     }
+
+    state.overlay = null;
+    state.locked = false;
+    state.lockStartedAt = 0;
   }
 
-  function check() {
-    if (!document.body) return;
+  function evaluateDetection() {
+    const elapsed = Date.now() - startedAt;
 
-    scanScripts();
+    if (elapsed < CONFIG.INITIAL_GRACE) return;
+
+    state.firstCheckComplete = true;
 
     /*
-     * Wait through the initial grace period.
+     * A real rendered ad is positive evidence that at least
+     * one ad slot is working. Do not lock the page in this case.
      */
-    if (Date.now() - state.startedAt < CONFIG.GRACE_TIME) {
+    if (hasFilledAd()) {
+      removeOverlay();
+      state.pendingSince = 0;
       return;
     }
 
     /*
-     * A rendered ad is a recovery signal.
+     * Detection requires evidence from BOTH systems.
+     * A missing Analytics setup is not counted as a failure.
      */
-    if (hasRenderedAd()) {
-      removeLock();
+    const bothScriptsFailed =
+      state.adsenseDetected &&
+      state.adsenseFailed &&
+      state.analyticsDetected &&
+      state.analyticsFailed;
+
+    /*
+     * Secondary path: Analytics failed, AdSense JS loaded,
+     * and a real AdSense slot remains pending beyond the grace.
+     * An explicitly unfilled slot alone never triggers a lock.
+     */
+    const pendingAdPath =
+      state.analyticsDetected &&
+      state.analyticsFailed &&
+      state.adsenseDetected &&
+      state.adsenseLoaded &&
+      hasPendingAdSlot() &&
+      elapsed >= CONFIG.AD_PENDING_GRACE;
+
+    const suspicious = bothScriptsFailed || pendingAdPath;
+
+    if (!suspicious) {
+      state.lockStartedAt = 0;
       return;
     }
 
-    /*
-     * If any AdSense script has loaded successfully,
-     * a script-load failure alone cannot justify a lock.
-     */
-    if (state.loadedScripts.size > 0) {
-      state.confirmations = 0;
+    if (!state.lockStartedAt) {
+      state.lockStartedAt = Date.now();
       return;
     }
 
-    /*
-     * Only consider a script-based lock if an actual
-     * AdSense script exists and failed to load.
-     */
-    const hasObservedScript = state.scripts.size > 0;
-    const hasFailedScript = state.failedScripts.size > 0;
-
-    if (hasObservedScript && hasFailedScript) {
-      state.confirmations++;
-
-      if (
-        state.confirmations >= CONFIG.REQUIRED_CONFIRMATIONS
-      ) {
-        showLock();
-      }
-    } else {
-      state.confirmations = 0;
+    if (
+      Date.now() - state.lockStartedAt >=
+      CONFIG.CONFIRMATION_TIME
+    ) {
+      createOverlay();
     }
   }
 
   function start() {
-    scanScripts();
-    check();
+    inspectExistingScripts();
+    watchNewScripts();
 
-    state.interval = window.setInterval(
-      check,
+    /*
+     * Attach listeners to scripts already present.
+     * For best error coverage, install this code in <head>
+     * before the Analytics and AdSense scripts.
+     */
+    document.querySelectorAll("script[src]").forEach(watchScript);
+
+    window.setInterval(
+      evaluateDetection,
       CONFIG.CHECK_INTERVAL
     );
   }
@@ -301,6 +386,4 @@
   } else {
     start();
   }
-
 })();
-</script>
