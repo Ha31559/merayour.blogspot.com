@@ -2,63 +2,64 @@
   "use strict";
 
   // ==========================================================
-  // MERAYOUR ADGUARD V10
-  // HYBRID STRICT + BALANCED ADVANCED EDITION
+  // MERAYOUR ADGUARD V11
+  // SIMPLIFIED HYBRID EDITION
   //
   // Preserves:
-  // - Original DOM Detach Lock
-  // - Original overlay design and Reload button
-  // - GA4 monitoring
-  // - AdSense script and slot monitoring
-  // - Initial and system grace periods
+  // - DOM detach/restore lock
+  // - Dark overlay and reload button
+  // - GA4 and AdSense monitoring
+  // - Grace periods
+  // - Failure confirmation
   // - Recovery confirmation
   //
-  // Improvements:
-  // - Multiple-signal verification
-  // - Script-load race reconciliation
-  // - Performance Resource Timing inspection
-  // - Positive health evidence
-  // - Persistent failure confirmation
-  // - Recovery watchdog
-  // - Optional diagnostic logging
+  // Simplified:
+  // - No evidence scoring
+  // - No detection threshold
+  // - No multiple-signal scoring engine
+  // - Missing scripts checked after grace period
   //
-  // IMPORTANT:
-  // Browser-side detection cannot guarantee identification
-  // of every ad blocker or distinguish every network failure.
+  // Note:
+  // Browser-side detection cannot conclusively distinguish
+  // an ad blocker from every network or configuration failure.
   // ==========================================================
 
-  if (window.MERAYOUR_ADGUARD_V10) return;
+  if (window.MERAYOUR_ADGUARD_V11) return;
 
-  window.MERAYOUR_ADGUARD_V10 = true;
+  function isBloggerPreview() {
+    const host = (location.hostname || "").toLowerCase();
+    const search = (location.search || "").toLowerCase();
+
+    return (
+      host === "blogger.com" ||
+      host.endsWith(".blogger.com") ||
+      /(?:^|[?&])preview=(?:true|1)(?:&|$)/.test(search)
+    );
+  }
+
+  if (isBloggerPreview()) return;
+
+  window.MERAYOUR_ADGUARD_V11 = true;
+
+  // ==========================================================
+  // CONFIGURATION
+  // ==========================================================
 
   const CONFIG = {
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    // Grace periods
-    INITIAL_GRACE: 500,
-    SYSTEM_GRACE: 1000,
+    INITIAL_GRACE: 3000,
+    SYSTEM_GRACE: 10000,
 
-    // Detection and recovery
-    CONFIRMATION_TIME: 1000,
-    RECOVERY_CONFIRMATION_TIME: 1000,
-    CHECK_INTERVAL: 500,
+    CONFIRMATION_TIME: 3000,
+    RECOVERY_CONFIRMATION_TIME: 3000,
+    CHECK_INTERVAL: 1000,
 
-    // Evidence scoring
-    GA_SCRIPT_FAILURE: 50,
-    GA_LIBRARY_MISSING: 50,
-
-    ADSENSE_SCRIPT_FAILURE: 50,
-    ADSENSE_LIBRARY_MISSING: 50,
-
-    // A single signal must not trigger the lock.
-    DETECTION_THRESHOLD: 1,
-
-    // Diagnostics: true writes state changes to the console.
     DIAGNOSTICS: true,
 
-    OVERLAY_ID: "merayour-v92-lock",
-    STYLE_ID: "merayour-v92-style",
+    OVERLAY_ID: "merayour-v11-lock",
+    STYLE_ID: "merayour-v11-style",
 
     CONTENT_SELECTORS: [
       ".post-body",
@@ -81,28 +82,21 @@
     adsenseScriptFailed: false,
     adsenseResourceSeen: false,
 
-    adSlotsFound: false,
-    adFilled: false,
-    adUnfilled: false,
-
-    gaFailureScore: 0,
-    adsenseFailureScore: 0,
-
     suspiciousSince: 0,
     healthySince: 0,
 
     locked: false,
+    lockInProgress: false,
+
     lastDiagnosticState: "",
 
-    observer: null,
+    scriptObserver: null,
     gaObserver: null,
     lockObserver: null,
     timer: null,
 
     detachedContent: new Map(),
-
-    savedPageStyles: null,
-    lockInProgress: false
+    savedPageStyles: null
   };
 
   // ==========================================================
@@ -120,29 +114,12 @@
 
     try {
       console.info(
-        "[Merayour AdGuard V10]",
+        "[Merayour AdGuard V11]",
         label,
         details || ""
       );
     } catch (_) {}
   }
-
-  // ==========================================================
-  // ENVIRONMENT
-  // ==========================================================
-
-  function isBloggerPreview() {
-    const host = (location.hostname || "").toLowerCase();
-    const search = (location.search || "").toLowerCase();
-
-    return (
-      host === "blogger.com" ||
-      host.endsWith(".blogger.com") ||
-      /(?:^|[?&])preview=(?:true|1)(?:&|$)/.test(search)
-    );
-  }
-
-  if (isBloggerPreview()) return;
 
   // ==========================================================
   // SCRIPT CLASSIFICATION
@@ -167,9 +144,7 @@
     }
 
     if (
-      url.includes(
-        "googlesyndication.com/pagead/js/adsbygoogle.js"
-      ) &&
+      url.includes("googlesyndication.com/pagead/js/adsbygoogle.js") &&
       url.includes(CONFIG.ADSENSE_ID.toLowerCase())
     ) {
       return "ADSENSE";
@@ -191,23 +166,8 @@
     );
   }
 
-  function isGAScriptResource(url) {
-    const type = classifyScript(url);
-    return type === "GA4";
-  }
-
-  function isAdSenseResource(url) {
-    const type = classifyScript(url);
-    return type === "ADSENSE";
-  }
-
   // ==========================================================
-  // RESOURCE TIMING RECONCILIATION
-  //
-  // Important: script load listeners can be attached after a
-  // script has already loaded. Resource Timing helps identify
-  // this situation, although resource entries alone are not
-  // absolute proof of successful execution.
+  // RESOURCE TIMING
   // ==========================================================
 
   function inspectResources() {
@@ -220,24 +180,24 @@
     }
 
     entries.forEach(function (entry) {
-      const name = entry.name || "";
+      const type = classifyScript(entry.name || "");
 
-      if (isGAScriptResource(name)) {
+      if (type === "GA4") {
         state.gaResourceSeen = true;
       }
 
-      if (isAdSenseResource(name)) {
+      if (type === "ADSENSE") {
         state.adsenseResourceSeen = true;
       }
 
-      if (isGAResource(name)) {
+      if (isGAResource(entry.name || "")) {
         state.gaActivitySeen = true;
       }
     });
   }
 
   // ==========================================================
-  // SCRIPT LISTENERS
+  // SCRIPT LOAD / ERROR MONITOR
   // ==========================================================
 
   function attachScriptListeners(script) {
@@ -247,11 +207,11 @@
 
     if (!type) return;
 
-    if (script.dataset.merayourV10Watched === "1") {
+    if (script.dataset.merayourV11Watched === "1") {
       return;
     }
 
-    script.dataset.merayourV10Watched = "1";
+    script.dataset.merayourV11Watched = "1";
 
     if (type === "GA4") {
       state.gaScriptFound = true;
@@ -278,24 +238,25 @@
         state.adsenseScriptFailed = true;
       }
 
-      diagnostic("Script error observed", type);
+      diagnostic("Script error", type);
     }, { once: true });
   }
 
-  // Capture script-loading errors.
+  // Capture resource errors even if an element listener
+  // was attached too late.
   window.addEventListener("error", function (event) {
     const target = event.target;
 
-    if (!target || target.tagName !== "SCRIPT") {
-      return;
-    }
+    if (!target || target.tagName !== "SCRIPT") return;
 
     const type = classifyScript(target.src || "");
 
     if (type === "GA4") {
       state.gaScriptFound = true;
       state.gaScriptFailed = true;
-    } else if (type === "ADSENSE") {
+    }
+
+    if (type === "ADSENSE") {
       state.adsenseScriptFound = true;
       state.adsenseScriptFailed = true;
     }
@@ -308,7 +269,7 @@
 
     if (!document.documentElement) return;
 
-    state.observer = new MutationObserver(function (records) {
+    state.scriptObserver = new MutationObserver(function (records) {
       records.forEach(function (record) {
         record.addedNodes.forEach(function (node) {
           if (node.nodeType !== 1) return;
@@ -326,7 +287,7 @@
       });
     });
 
-    state.observer.observe(document.documentElement, {
+    state.scriptObserver.observe(document.documentElement, {
       childList: true,
       subtree: true
     });
@@ -356,257 +317,89 @@
   }
 
   // ==========================================================
-  // ADSENSE SLOT MONITOR
+  // POSITIVE HEALTH SIGNALS
   // ==========================================================
-
-  function inspectAdSlots() {
-    const selector =
-      'ins.adsbygoogle[data-ad-client="' +
-      CONFIG.ADSENSE_ID +
-      '"]';
-
-    const slots = document.querySelectorAll(selector);
-
-    state.adSlotsFound = slots.length > 0;
-
-    let filled = false;
-    let unfilled = false;
-
-    slots.forEach(function (slot) {
-      const status = (
-        slot.getAttribute("data-ad-status") || ""
-      ).toLowerCase();
-
-      if (status === "filled") {
-        filled = true;
-      }
-
-      if (status === "unfilled") {
-        unfilled = true;
-      }
-
-      // Keep the existing visual iframe check.
-      if (iframeIsVisible(slot, status)) {
-        filled = true;
-      }
-    });
-
-    state.adFilled = filled;
-    state.adUnfilled = unfilled;
-  }
-
-  function iframeIsVisible(slot, status) {
-    if (status !== "filled") return false;
-
-    const iframe = slot.querySelector("iframe");
-
-    if (!iframe) return false;
-
-    try {
-      const rect = iframe.getBoundingClientRect();
-      const style = getComputedStyle(iframe);
-
-      return (
-        rect.width >= 10 &&
-        rect.height >= 10 &&
-        style.display !== "none" &&
-        style.visibility !== "hidden"
-      );
-    } catch (_) {
-      return false;
-    }
-  }
-
-  // ==========================================================
-  // POSITIVE HEALTH RECONCILIATION
-  // ==========================================================
-
-  function reconcileHealth() {
-    inspectResources();
-
-    // A later positive signal overrides a stale error flag.
-    if (
-      state.gaScriptLoaded ||
-      (
-        state.gaResourceSeen &&
-        typeof window.gtag === "function"
-      ) ||
-      (
-        typeof window.gtag === "function" &&
-        state.gaActivitySeen
-      )
-    ) {
-      state.gaScriptFailed = false;
-    }
-
-    if (
-      state.adsenseScriptLoaded ||
-      (
-        state.adsenseResourceSeen &&
-        typeof window.adsbygoogle !== "undefined"
-      )
-    ) {
-      state.adsenseScriptFailed = false;
-    }
-  }
 
   function analyticsHealthy() {
+    const gtagPresent = typeof window.gtag === "function";
+
     return (
       state.gaScriptLoaded ||
-      (
-        state.gaResourceSeen &&
-        typeof window.gtag === "function"
-      ) ||
-      (
-        typeof window.gtag === "function" &&
-        state.gaActivitySeen
-      )
+      (state.gaResourceSeen && gtagPresent) ||
+      (gtagPresent && state.gaActivitySeen)
     );
   }
 
   function adsenseHealthy() {
+    const libraryPresent =
+      typeof window.adsbygoogle !== "undefined";
+
     return (
       (
         state.adsenseScriptLoaded ||
         state.adsenseResourceSeen
       ) &&
-      typeof window.adsbygoogle !== "undefined"
+      libraryPresent
     );
   }
 
+  function reconcileHealth() {
+    inspectResources();
+
+    if (analyticsHealthy()) {
+      state.gaScriptFailed = false;
+    }
+
+    if (adsenseHealthy()) {
+      state.adsenseScriptFailed = false;
+    }
+  }
+
   // ==========================================================
-  // HYBRID MULTI-SIGNAL EVIDENCE ENGINE
+  // SIMPLIFIED FAILURE CHECK
   //
-  // One isolated failure signal is not enough.
-  // An unfilled ad is not treated as proof of blocking.
-  // Lack of GA activity alone is not treated as proof.
+  // After SYSTEM_GRACE:
+  // - Missing expected script is a failure signal.
+  // - Found but not successfully loaded is a failure signal.
+  // - A positive health signal clears the failure.
+  //
+  // Locking still requires BOTH services to show failure
+  // and the condition to persist for CONFIRMATION_TIME.
   // ==========================================================
 
   function calculateEvidence() {
     const elapsed = Date.now() - startedAt;
 
-    let gaScore = 0;
-    let adScore = 0;
+    const gaHealthy = analyticsHealthy();
+    const adsHealthy = adsenseHealthy();
 
-    const gaLibraryPresent =
-      typeof window.gtag === "function";
-
-    const adsLibraryPresent =
-      typeof window.adsbygoogle !== "undefined";
-
-    const gaPositive =
-      state.gaScriptLoaded ||
+    const gaFailure =
+      elapsed >= CONFIG.SYSTEM_GRACE &&
+      !gaHealthy &&
       (
-        state.gaResourceSeen &&
-        gaLibraryPresent
-      ) ||
-      (
-        gaLibraryPresent &&
-        state.gaActivitySeen
+        state.gaScriptFailed ||
+        !state.gaScriptFound ||
+        !state.gaScriptLoaded
       );
 
-    const adsPositive =
+    const adsFailure =
+      elapsed >= CONFIG.SYSTEM_GRACE &&
+      !adsHealthy &&
       (
-        state.adsenseScriptLoaded ||
-        state.adsenseResourceSeen
-      ) &&
-      adsLibraryPresent;
-
-    // --------------------------------------------------------
-    // GA4 EVIDENCE
-    // --------------------------------------------------------
-
-    const gaExplicitFailure =
-      state.gaScriptFailed &&
-      !gaPositive;
-
-    const gaLibraryMissing =
-      elapsed >= CONFIG.SYSTEM_GRACE &&
-      state.gaScriptFound &&
-      !state.gaScriptLoaded &&
-      !state.gaResourceSeen &&
-      !gaLibraryPresent &&
-      !state.gaActivitySeen;
-
-    if (gaExplicitFailure) {
-      gaScore += CONFIG.GA_SCRIPT_FAILURE;
-    }
-
-    if (gaLibraryMissing) {
-      gaScore += CONFIG.GA_LIBRARY_MISSING;
-    }
-
-    // --------------------------------------------------------
-    // ADSENSE EVIDENCE
-    // --------------------------------------------------------
-
-    const adsExplicitFailure =
-      state.adsenseScriptFailed &&
-      !adsPositive;
-
-    const adsLibraryMissing =
-      elapsed >= CONFIG.SYSTEM_GRACE &&
-      state.adsenseScriptFound &&
-      !state.adsenseScriptLoaded &&
-      !state.adsenseResourceSeen &&
-      !adsLibraryPresent;
-
-    if (adsExplicitFailure) {
-      adScore += CONFIG.ADSENSE_SCRIPT_FAILURE;
-    }
-
-    if (adsLibraryMissing) {
-      adScore += CONFIG.ADSENSE_LIBRARY_MISSING;
-    }
-
-    // "unfilled" is a valid AdSense outcome and never adds
-    // blocking evidence by itself.
-    //
-    // No ad slot, no fill, missing GA activity, and missing
-    // data-ad-status are not standalone blocker proofs.
-
-    state.gaFailureScore = gaScore;
-    state.adsenseFailureScore = adScore;
-
-    const total = gaScore + adScore;
-
-    // Require multiple independent signal categories:
-    //
-    // A. Strong failure evidence for both services; OR
-    // B. Multiple consistent signals for one service.
-    //
-    // Persistent confirmation time is also required later.
-    const gaMultipleSignals =
-      gaExplicitFailure && gaLibraryMissing;
-
-    const adsMultipleSignals =
-      adsExplicitFailure && adsLibraryMissing;
-
-    const bothServicesFailed =
-      gaScore >= CONFIG.GA_SCRIPT_FAILURE &&
-      adScore >= CONFIG.ADSENSE_SCRIPT_FAILURE;
-
-    const multipleSignals =
-      bothServicesFailed ||
-      gaMultipleSignals ||
-      adsMultipleSignals;
+        state.adsenseScriptFailed ||
+        !state.adsenseScriptFound ||
+        !state.adsenseScriptLoaded
+      );
 
     return {
-      ga: gaScore,
-      adsense: adScore,
-      total: total,
+      gaHealthy: gaHealthy,
+      adsHealthy: adsHealthy,
 
-      gaExplicitFailure: gaExplicitFailure,
-      gaLibraryMissing: gaLibraryMissing,
+      gaFailure: gaFailure,
+      adsFailure: adsFailure,
 
-      adsExplicitFailure: adsExplicitFailure,
-      adsLibraryMissing: adsLibraryMissing,
-
-      multipleSignals: multipleSignals,
-
-      suspicious:
-        multipleSignals &&
-        total >= CONFIG.DETECTION_THRESHOLD
+      // Require both services to fail.
+      suspicious: gaFailure && adsFailure
     };
   }
 
@@ -620,13 +413,13 @@
       i < CONFIG.CONTENT_SELECTORS.length;
       i++
     ) {
-      const selector = CONFIG.CONTENT_SELECTORS[i];
-
       let matches = [];
 
       try {
         matches = Array.from(
-          document.querySelectorAll(selector)
+          document.querySelectorAll(
+            CONFIG.CONTENT_SELECTORS[i]
+          )
         );
       } catch (_) {
         continue;
@@ -654,13 +447,10 @@
         return !state.detachedContent.has(el);
       });
 
-      if (matches.length > 0) {
+      if (matches.length) {
         return matches.filter(function (el) {
           return !matches.some(function (other) {
-            return (
-              other !== el &&
-              other.contains(el)
-            );
+            return other !== el && other.contains(el);
           });
         });
       }
@@ -670,34 +460,65 @@
   }
 
   // ==========================================================
-  // DOM DETACH LOCK
+  // SAVE AND RESTORE PAGE STYLES
   // ==========================================================
 
   function savePageStyles() {
     if (state.savedPageStyles) return;
 
+    const html = document.documentElement;
+    const body = document.body;
+
     state.savedPageStyles = {
-      htmlOverflow:
-        document.documentElement.style.getPropertyValue(
-          "overflow"
-        ),
+      htmlOverflow: html.style.getPropertyValue("overflow"),
+      htmlPriority: html.style.getPropertyPriority("overflow"),
 
-      htmlOverflowPriority:
-        document.documentElement.style.getPropertyPriority(
-          "overflow"
-        ),
+      bodyOverflow: body
+        ? body.style.getPropertyValue("overflow")
+        : "",
 
-      bodyOverflow:
-        document.body
-          ? document.body.style.getPropertyValue("overflow")
-          : "",
-
-      bodyOverflowPriority:
-        document.body
-          ? document.body.style.getPropertyPriority("overflow")
-          : ""
+      bodyPriority: body
+        ? body.style.getPropertyPriority("overflow")
+        : ""
     };
   }
+
+  function restorePageStyles() {
+    const saved = state.savedPageStyles;
+
+    if (!saved) return;
+
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (saved.htmlOverflow) {
+      html.style.setProperty(
+        "overflow",
+        saved.htmlOverflow,
+        saved.htmlPriority
+      );
+    } else {
+      html.style.removeProperty("overflow");
+    }
+
+    if (body) {
+      if (saved.bodyOverflow) {
+        body.style.setProperty(
+          "overflow",
+          saved.bodyOverflow,
+          saved.bodyPriority
+        );
+      } else {
+        body.style.removeProperty("overflow");
+      }
+    }
+
+    state.savedPageStyles = null;
+  }
+
+  // ==========================================================
+  // DETACH / RESTORE CONTENT
+  // ==========================================================
 
   function detachContent() {
     if (state.lockInProgress) return;
@@ -715,16 +536,14 @@
           "Merayour content temporarily locked"
         );
 
-        const record = {
-          placeholder: placeholder,
-          parent: parent,
-          nextSibling: nextSibling
-        };
-
         try {
           parent.replaceChild(placeholder, el);
 
-          state.detachedContent.set(el, record);
+          state.detachedContent.set(el, {
+            placeholder: placeholder,
+            parent: parent,
+            nextSibling: nextSibling
+          });
         } catch (_) {}
       });
 
@@ -746,39 +565,6 @@
     } finally {
       state.lockInProgress = false;
     }
-  }
-
-  function restorePageStyles() {
-    const saved = state.savedPageStyles;
-
-    if (!saved) return;
-
-    const html = document.documentElement;
-    const body = document.body;
-
-    if (saved.htmlOverflow) {
-      html.style.setProperty(
-        "overflow",
-        saved.htmlOverflow,
-        saved.htmlOverflowPriority
-      );
-    } else {
-      html.style.removeProperty("overflow");
-    }
-
-    if (body) {
-      if (saved.bodyOverflow) {
-        body.style.setProperty(
-          "overflow",
-          saved.bodyOverflow,
-          saved.bodyOverflowPriority
-        );
-      } else {
-        body.style.removeProperty("overflow");
-      }
-    }
-
-    state.savedPageStyles = null;
   }
 
   function restoreContent() {
@@ -818,9 +604,7 @@
   // ==========================================================
 
   function installStyles() {
-    if (document.getElementById(CONFIG.STYLE_ID)) {
-      return;
-    }
+    if (document.getElementById(CONFIG.STYLE_ID)) return;
 
     const style = document.createElement("style");
 
@@ -844,7 +628,7 @@
         isolation: isolate !important;
       }
 
-      #${CONFIG.OVERLAY_ID} .ag-v92-card {
+      #${CONFIG.OVERLAY_ID} .ag-v11-card {
         width: 100% !important;
         max-width: 470px !important;
         padding: 30px 24px !important;
@@ -882,9 +666,7 @@
       }
     `;
 
-    (document.head || document.documentElement).appendChild(
-      style
-    );
+    (document.head || document.documentElement).appendChild(style);
   }
 
   // ==========================================================
@@ -892,34 +674,28 @@
   // ==========================================================
 
   function createLock() {
-    if (!document.body) return;
+    if (!document.body || state.locked) return;
 
     installStyles();
 
-    let overlay = document.getElementById(
-      CONFIG.OVERLAY_ID
-    );
+    let overlay = document.getElementById(CONFIG.OVERLAY_ID);
 
     if (!overlay) {
       overlay = document.createElement("div");
 
       overlay.id = CONFIG.OVERLAY_ID;
-
       overlay.setAttribute("role", "dialog");
       overlay.setAttribute("aria-modal", "true");
-
       overlay.setAttribute(
         "aria-labelledby",
-        "merayour-v92-heading"
+        "merayour-v11-heading"
       );
 
       const card = document.createElement("div");
-
-      card.className = "ag-v92-card";
+      card.className = "ag-v11-card";
 
       const heading = document.createElement("h2");
-
-      heading.id = "merayour-v92-heading";
+      heading.id = "merayour-v11-heading";
       heading.textContent = "Ad Blocker Detected!";
 
       const message = document.createElement("p");
@@ -930,11 +706,8 @@
         "then reload the page to continue reading.";
 
       const button = document.createElement("button");
-
       button.type = "button";
-
-      button.textContent =
-        "I've Allowed Ads — Reload";
+      button.textContent = "I've Allowed Ads — Reload";
 
       button.addEventListener("click", function () {
         location.reload();
@@ -943,45 +716,39 @@
       card.appendChild(heading);
       card.appendChild(message);
       card.appendChild(button);
-
       overlay.appendChild(card);
     }
 
-    if (!overlay.isConnected) {
-      document.body.appendChild(overlay);
-    }
+    document.body.appendChild(overlay);
 
     state.locked = true;
 
     detachContent();
 
-    diagnostic("Content locked", "Persistent multi-signal evidence");
+    diagnostic(
+      "Content locked",
+      "Both services failed after grace and confirmation"
+    );
 
-    if (
-      !state.lockObserver &&
-      document.documentElement
-    ) {
+    if (!state.lockObserver && document.documentElement) {
       state.lockObserver = new MutationObserver(function () {
         if (!state.locked) return;
 
-        const currentOverlay = document.getElementById(
+        const current = document.getElementById(
           CONFIG.OVERLAY_ID
         );
 
-        if (!currentOverlay && document.body) {
+        if (!current && document.body) {
           document.body.appendChild(overlay);
         }
 
         detachContent();
       });
 
-      state.lockObserver.observe(
-        document.documentElement,
-        {
-          childList: true,
-          subtree: true
-        }
-      );
+      state.lockObserver.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+      });
     }
   }
 
@@ -997,62 +764,50 @@
       state.lockObserver = null;
     }
 
-    const overlay = document.getElementById(
-      CONFIG.OVERLAY_ID
-    );
+    const overlay = document.getElementById(CONFIG.OVERLAY_ID);
 
-    if (overlay) {
-      overlay.remove();
-    }
+    if (overlay) overlay.remove();
 
     restoreContent();
 
     state.suspiciousSince = 0;
     state.healthySince = 0;
 
-    diagnostic("Lock removed", "Health recovery confirmed");
+    diagnostic("Lock removed", "Recovery confirmed");
   }
 
   // ==========================================================
-  // HYBRID WATCHDOG
+  // WATCHDOG
   // ==========================================================
 
   function evaluate() {
     inspectResources();
-    inspectAdSlots();
     reconcileHealth();
 
     const elapsed = Date.now() - startedAt;
 
-    // Allow the page to initialize.
-    if (elapsed < CONFIG.INITIAL_GRACE) {
-      return;
-    }
+    if (elapsed < CONFIG.INITIAL_GRACE) return;
 
-    const gaHealthy = analyticsHealthy();
-    const adsHealthy = adsenseHealthy();
+    const evidence = calculateEvidence();
 
-    const bothHealthy = gaHealthy && adsHealthy;
+    diagnostic(
+      "Status",
+      "GA healthy=" + evidence.gaHealthy +
+      ", AdSense healthy=" + evidence.adsHealthy +
+      ", GA failure=" + evidence.gaFailure +
+      ", AdSense failure=" + evidence.adsFailure +
+      ", Suspicious=" + evidence.suspicious
+    );
 
-    // Positive health evidence clears stale failure flags.
-    if (bothHealthy) {
-      state.gaScriptFailed = false;
-      state.adsenseScriptFailed = false;
-
-      state.gaFailureScore = 0;
-      state.adsenseFailureScore = 0;
-
+    // Recovery requires both services to become healthy.
+    if (evidence.gaHealthy && evidence.adsHealthy) {
       state.suspiciousSince = 0;
 
       if (!state.locked) {
         state.healthySince = 0;
-
-        diagnostic("Healthy", "Both services have positive evidence");
-
         return;
       }
 
-      // Keep the recovery confirmation period.
       if (!state.healthySince) {
         state.healthySince = Date.now();
       }
@@ -1069,22 +824,11 @@
 
     state.healthySince = 0;
 
-    // Never lock before the system grace period.
     if (elapsed < CONFIG.SYSTEM_GRACE) {
       state.suspiciousSince = 0;
       return;
     }
 
-    const evidence = calculateEvidence();
-
-    diagnostic(
-      "Evidence evaluated",
-      "GA=" + evidence.ga +
-      ", AdSense=" + evidence.adsense +
-      ", Multiple=" + evidence.multipleSignals
-    );
-
-    // Strict threshold + Balanced multi-signal confirmation.
     if (!evidence.suspicious) {
       state.suspiciousSince = 0;
       return;
@@ -1094,11 +838,9 @@
       state.suspiciousSince = Date.now();
     }
 
-    const suspiciousDuration =
-      Date.now() - state.suspiciousSince;
-
     if (
-      suspiciousDuration >= CONFIG.CONFIRMATION_TIME
+      Date.now() - state.suspiciousSince >=
+      CONFIG.CONFIRMATION_TIME
     ) {
       createLock();
     }
@@ -1113,10 +855,6 @@
     watchGAResources();
 
     inspectResources();
-    inspectAdSlots();
-
-    // Reconcile scripts that may have loaded before listeners
-    // were attached.
     reconcileHealth();
 
     state.timer = window.setInterval(
@@ -1126,7 +864,10 @@
 
     evaluate();
 
-    diagnostic("Initialized", "Hybrid Advanced Edition");
+    diagnostic(
+      "Initialized",
+      "Simplified Hybrid Edition"
+    );
   }
 
   if (document.readyState === "loading") {
@@ -1138,5 +879,4 @@
   } else {
     init();
   }
-
 })();
