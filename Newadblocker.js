@@ -6,11 +6,11 @@
 
   // ==========================================================
   // MERAYOUR ADGUARD V9.2
-  // DOM DETACH LOCK EDITION
+  // SMART HEALTH CHECK EDITION
   //
-  // GA4 OR ADSENSE FAILURE = LOCK
-  // ARTICLE NODES ARE DETACHED WHILE LOCKED
-  // ORIGINAL DOM NODES ARE PRESERVED FOR RESTORATION
+  // Original DOM Detach Lock preserved.
+  // Healthy Analytics + AdSense suppress stale failures.
+  // Recovery requires sustained positive health evidence.
   // ==========================================================
 
   const CONFIG = {
@@ -32,8 +32,6 @@
     OVERLAY_ID: "merayour-v92-lock",
     STYLE_ID: "merayour-v92-style",
 
-    // Ordered from most specific to fallback.
-    // Only the first selector with matching elements is used.
     CONTENT_SELECTORS: [
       ".post-body",
       "article",
@@ -69,7 +67,6 @@
     lockObserver: null,
     timer: null,
 
-    // element -> restoration information
     detachedContent: new Map(),
 
     savedPageStyles: null,
@@ -416,8 +413,6 @@
       });
 
       if (matches.length > 0) {
-        // Remove nested candidates so each content area
-        // is detached only once.
         return matches.filter(function (el) {
           return !matches.some(function (other) {
             return (
@@ -434,11 +429,6 @@
 
   // ==========================================================
   // DOM DETACH LOCK
-  //
-  // Instead of relying only on CSS, replace the content node
-  // with a comment placeholder while the lock is active.
-  //
-  // The original node is retained in memory and restored later.
   // ==========================================================
 
   function savePageStyles() {
@@ -488,12 +478,8 @@
 
         try {
           parent.replaceChild(placeholder, el);
-
           state.detachedContent.set(el, record);
-        } catch (_) {
-          // If a theme operation races with this change,
-          // leave the node alone rather than deleting it.
-        }
+        } catch (_) {}
       });
 
       savePageStyles();
@@ -550,8 +536,6 @@
   }
 
   function restoreContent() {
-    // Restore the actual original nodes rather than rebuilding
-    // their HTML. This avoids discarding their existing listeners.
     state.detachedContent.forEach(function (record, el) {
       try {
         if (
@@ -565,8 +549,6 @@
           return;
         }
 
-        // Fallback if the original placeholder was removed
-        // by a theme re-render while the lock was active.
         if (record.parent && record.parent.isConnected) {
           const reference =
             record.nextSibling &&
@@ -576,13 +558,10 @@
 
           record.parent.insertBefore(el, reference);
         }
-      } catch (_) {
-        // Keep recovery best-effort and avoid crashing the page.
-      }
+      } catch (_) {}
     });
 
     state.detachedContent.clear();
-
     restorePageStyles();
   }
 
@@ -716,10 +695,8 @@
 
     state.locked = true;
 
-    // Remove article content from the active document tree.
     detachContent();
 
-    // Watch for new content inserted by Blogger or the theme.
     if (
       !state.lockObserver &&
       document.documentElement
@@ -727,7 +704,7 @@
       state.lockObserver = new MutationObserver(function () {
         if (!state.locked) return;
 
-        let currentOverlay = document.getElementById(
+        const currentOverlay = document.getElementById(
           CONFIG.OVERLAY_ID
         );
 
@@ -775,7 +752,7 @@
   }
 
   // ==========================================================
-  // MAIN LOOP
+  // SMART MAIN LOOP — TUNED
   // ==========================================================
 
   function evaluate() {
@@ -788,32 +765,34 @@
       return;
     }
 
-    const evidence = calculateEvidence();
+    // Positive health evidence must exist for BOTH services.
+    const analyticsHealthy =
+      typeof window.gtag === "function" &&
+      state.gaActivitySeen;
 
-    const suspicious =
-      evidence.suspicious &&
-      evidence.total >= CONFIG.DETECTION_THRESHOLD;
+    const adsenseHealthy =
+      typeof window.adsbygoogle !== "undefined" &&
+      state.adFilled;
 
-    if (suspicious) {
-      state.healthySince = 0;
+    const bothServicesHealthy =
+      analyticsHealthy && adsenseHealthy;
 
-      if (!state.suspiciousSince) {
-        state.suspiciousSince = Date.now();
+    // HEALTHY OVERRIDE:
+    // Do not let stale script failures trigger a false popup.
+    if (bothServicesHealthy) {
+      state.gaScriptFailed = false;
+      state.adsenseScriptFailed = false;
+
+      state.gaFailureScore = 0;
+      state.adsenseFailureScore = 0;
+
+      state.suspiciousSince = 0;
+
+      if (!state.locked) {
+        state.healthySince = 0;
+        return;
       }
 
-      if (
-        Date.now() - state.suspiciousSince >=
-        CONFIG.CONFIRMATION_TIME
-      ) {
-        createLock();
-      }
-
-      return;
-    }
-
-    state.suspiciousSince = 0;
-
-    if (state.locked) {
       if (!state.healthySince) {
         state.healthySince = Date.now();
       }
@@ -824,6 +803,34 @@
       ) {
         removeLock();
       }
+
+      return;
+    }
+
+    // If either service is not positively verified,
+    // return to the original evidence engine.
+    state.healthySince = 0;
+
+    const evidence = calculateEvidence();
+
+    const suspicious =
+      evidence.suspicious &&
+      evidence.total >= CONFIG.DETECTION_THRESHOLD;
+
+    if (!suspicious) {
+      state.suspiciousSince = 0;
+      return;
+    }
+
+    if (!state.suspiciousSince) {
+      state.suspiciousSince = Date.now();
+    }
+
+    if (
+      Date.now() - state.suspiciousSince >=
+      CONFIG.CONFIRMATION_TIME
+    ) {
+      createLock();
     }
   }
 
