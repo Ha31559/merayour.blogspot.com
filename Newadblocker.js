@@ -52,7 +52,7 @@
     ADSENSE_LIBRARY_MISSING: 60,
 
     // A single signal must not trigger the lock.
-    DETECTION_THRESHOLD: 60,
+    DETECTION_THRESHOLD: 40,
 
     // Diagnostics: true writes state changes to the console.
     DIAGNOSTICS: true,
