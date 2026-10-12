@@ -1,13 +1,16 @@
 (function () {
   "use strict";
 
-  if (window.__MERAYOUR_ADGUARD_V91__) return;
-  window.__MERAYOUR_ADGUARD_V91__ = true;
+  if (window.__MERAYOUR_ADGUARD_V92__) return;
+  window.__MERAYOUR_ADGUARD_V92__ = true;
 
   // ==========================================================
-  // MERAYOUR ADGUARD V9.1 — CONTENT LOCK EDITION
+  // MERAYOUR ADGUARD V9.2
+  // DOM DETACH LOCK EDITION
+  //
   // GA4 OR ADSENSE FAILURE = LOCK
-  // ORIGINAL ARTICLE HTML IS PRESERVED
+  // ARTICLE NODES ARE DETACHED WHILE LOCKED
+  // ORIGINAL DOM NODES ARE PRESERVED FOR RESTORATION
   // ==========================================================
 
   const CONFIG = {
@@ -26,17 +29,15 @@
     ADSENSE_RENDER_MISSING: 60,
     DETECTION_THRESHOLD: 50,
 
-    OVERLAY_ID: "merayour-v91-lock",
-    STYLE_ID: "merayour-v91-style",
+    OVERLAY_ID: "merayour-v92-lock",
+    STYLE_ID: "merayour-v92-style",
 
-    // Add your actual article selectors if your theme
-    // uses a different content container.
+    // Ordered from most specific to fallback.
+    // Only the first selector with matching elements is used.
     CONTENT_SELECTORS: [
       ".post-body",
-      ".post-outer",
-      ".post",
       "article",
-      ".blog-posts"
+      ".post"
     ]
   };
 
@@ -64,10 +65,14 @@
     locked: false,
 
     observer: null,
+    gaObserver: null,
     lockObserver: null,
     timer: null,
 
-    protectedElements: new Map(),
+    // element -> restoration information
+    detachedContent: new Map(),
+
+    savedPageStyles: null,
     lockInProgress: false
   };
 
@@ -105,7 +110,9 @@
     }
 
     if (
-      url.includes("googlesyndication.com/pagead/js/adsbygoogle.js") &&
+      url.includes(
+        "googlesyndication.com/pagead/js/adsbygoogle.js"
+      ) &&
       url.includes(CONFIG.ADSENSE_ID.toLowerCase())
     ) {
       return "ADSENSE";
@@ -118,11 +125,14 @@
     if (!script || !script.src) return;
 
     const type = classifyScript(script.src);
+
     if (!type) return;
 
-    if (script.dataset.merayourV91Watched === "1") return;
+    if (script.dataset.merayourV92Watched === "1") {
+      return;
+    }
 
-    script.dataset.merayourV91Watched = "1";
+    script.dataset.merayourV92Watched = "1";
 
     if (type === "GA4") {
       state.gaScriptFound = true;
@@ -152,7 +162,9 @@
   window.addEventListener("error", function (event) {
     const target = event.target;
 
-    if (!target || target.tagName !== "SCRIPT") return;
+    if (!target || target.tagName !== "SCRIPT") {
+      return;
+    }
 
     const type = classifyScript(target.src || "");
 
@@ -208,18 +220,22 @@
     return (
       value.includes("google-analytics.com/g/collect") ||
       value.includes("analytics.google.com/g/collect") ||
-      value.includes("region1.google-analytics.com/g/collect") ||
+      value.includes(
+        "region1.google-analytics.com/g/collect"
+      ) ||
       value.includes("google-analytics.com/collect")
     );
   }
 
   function inspectGAResources() {
     try {
-      performance.getEntriesByType("resource").forEach(function (entry) {
-        if (isGAResource(entry.name)) {
-          state.gaActivitySeen = true;
+      performance.getEntriesByType("resource").forEach(
+        function (entry) {
+          if (isGAResource(entry.name)) {
+            state.gaActivitySeen = true;
+          }
         }
-      });
+      );
     } catch (_) {}
   }
 
@@ -227,15 +243,17 @@
     if (!("PerformanceObserver" in window)) return;
 
     try {
-      const observer = new PerformanceObserver(function (list) {
-        list.getEntries().forEach(function (entry) {
-          if (isGAResource(entry.name)) {
-            state.gaActivitySeen = true;
-          }
-        });
-      });
+      state.gaObserver = new PerformanceObserver(
+        function (list) {
+          list.getEntries().forEach(function (entry) {
+            if (isGAResource(entry.name)) {
+              state.gaActivitySeen = true;
+            }
+          });
+        }
+      );
 
-      observer.observe({
+      state.gaObserver.observe({
         type: "resource",
         buffered: true
       });
@@ -264,11 +282,14 @@
         slot.getAttribute("data-ad-status") || ""
       ).toLowerCase();
 
-      if (status === "filled") filled = true;
-      if (status === "unfilled") unfilled = true;
+      if (status === "filled") {
+        filled = true;
+      }
 
-      // A visible iframe is not proof of a served ad
-      // unless AdSense itself reports the slot as filled.
+      if (status === "unfilled") {
+        unfilled = true;
+      }
+
       const iframe = slot.querySelector("iframe");
 
       if (iframe && status === "filled") {
@@ -351,63 +372,131 @@
   }
 
   // ==========================================================
-  // CONTENT PROTECTION
-  // Preserve original HTML and existing listeners.
+  // CONTENT CANDIDATES
   // ==========================================================
 
-  function getProtectedElements() {
-    const found = new Set();
+  function getContentCandidates() {
+    for (
+      let i = 0;
+      i < CONFIG.CONTENT_SELECTORS.length;
+      i++
+    ) {
+      const selector = CONFIG.CONTENT_SELECTORS[i];
 
-    CONFIG.CONTENT_SELECTORS.forEach(function (selector) {
-      document.querySelectorAll(selector).forEach(function (el) {
+      let matches = [];
+
+      try {
+        matches = Array.from(
+          document.querySelectorAll(selector)
+        );
+      } catch (_) {
+        continue;
+      }
+
+      matches = matches.filter(function (el) {
+        if (!el.isConnected) return false;
+
         if (
           el.id === CONFIG.OVERLAY_ID ||
           el.closest("#" + CONFIG.OVERLAY_ID)
         ) {
-          return;
+          return false;
         }
 
-        // Avoid protecting the whole document or body.
         if (
           el === document.body ||
-          el === document.documentElement
+          el === document.documentElement ||
+          el.tagName === "SCRIPT" ||
+          el.tagName === "STYLE"
         ) {
-          return;
+          return false;
         }
 
-        found.add(el);
+        return !state.detachedContent.has(el);
       });
-    });
 
-    // Remove nested candidates when a parent is already protected.
-    return Array.from(found).filter(function (el) {
-      return !Array.from(found).some(function (other) {
-        return other !== el && other.contains(el);
-      });
-    });
+      if (matches.length > 0) {
+        // Remove nested candidates so each content area
+        // is detached only once.
+        return matches.filter(function (el) {
+          return !matches.some(function (other) {
+            return (
+              other !== el &&
+              other.contains(el)
+            );
+          });
+        });
+      }
+    }
+
+    return [];
   }
 
-  function protectContent() {
+  // ==========================================================
+  // DOM DETACH LOCK
+  //
+  // Instead of relying only on CSS, replace the content node
+  // with a comment placeholder while the lock is active.
+  //
+  // The original node is retained in memory and restored later.
+  // ==========================================================
+
+  function savePageStyles() {
+    if (state.savedPageStyles) return;
+
+    state.savedPageStyles = {
+      htmlOverflow:
+        document.documentElement.style.getPropertyValue(
+          "overflow"
+        ),
+      htmlOverflowPriority:
+        document.documentElement.style.getPropertyPriority(
+          "overflow"
+        ),
+      bodyOverflow:
+        document.body
+          ? document.body.style.getPropertyValue("overflow")
+          : "",
+      bodyOverflowPriority:
+        document.body
+          ? document.body.style.getPropertyPriority("overflow")
+          : ""
+    };
+  }
+
+  function detachContent() {
     if (state.lockInProgress) return;
 
     state.lockInProgress = true;
 
     try {
-      getProtectedElements().forEach(function (el) {
-        if (!state.protectedElements.has(el)) {
-          state.protectedElements.set(el, {
-            inert: el.inert,
-            ariaHidden: el.getAttribute("aria-hidden"),
-            userSelect: el.style.userSelect,
-            pointerEvents: el.style.pointerEvents
-          });
-        }
+      getContentCandidates().forEach(function (el) {
+        if (!el.parentNode || !el.isConnected) return;
 
-        el.inert = true;
-        el.setAttribute("aria-hidden", "true");
-        el.style.setProperty("user-select", "none", "important");
-        el.style.setProperty("pointer-events", "none", "important");
+        const parent = el.parentNode;
+        const nextSibling = el.nextSibling;
+
+        const placeholder = document.createComment(
+          "Merayour content temporarily locked"
+        );
+
+        const record = {
+          placeholder: placeholder,
+          parent: parent,
+          nextSibling: nextSibling
+        };
+
+        try {
+          parent.replaceChild(placeholder, el);
+
+          state.detachedContent.set(el, record);
+        } catch (_) {
+          // If a theme operation races with this change,
+          // leave the node alone rather than deleting it.
+        }
       });
+
+      savePageStyles();
 
       document.documentElement.style.setProperty(
         "overflow",
@@ -415,56 +504,96 @@
         "important"
       );
 
-      document.body.style.setProperty(
-        "overflow",
-        "hidden",
-        "important"
-      );
+      if (document.body) {
+        document.body.style.setProperty(
+          "overflow",
+          "hidden",
+          "important"
+        );
+      }
     } finally {
       state.lockInProgress = false;
     }
   }
 
+  function restorePageStyles() {
+    const saved = state.savedPageStyles;
+
+    if (!saved) return;
+
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (saved.htmlOverflow) {
+      html.style.setProperty(
+        "overflow",
+        saved.htmlOverflow,
+        saved.htmlOverflowPriority
+      );
+    } else {
+      html.style.removeProperty("overflow");
+    }
+
+    if (body) {
+      if (saved.bodyOverflow) {
+        body.style.setProperty(
+          "overflow",
+          saved.bodyOverflow,
+          saved.bodyOverflowPriority
+        );
+      } else {
+        body.style.removeProperty("overflow");
+      }
+    }
+
+    state.savedPageStyles = null;
+  }
+
   function restoreContent() {
-    state.protectedElements.forEach(function (original, el) {
-      if (!el.isConnected) return;
+    // Restore the actual original nodes rather than rebuilding
+    // their HTML. This avoids discarding their existing listeners.
+    state.detachedContent.forEach(function (record, el) {
+      try {
+        if (
+          record.placeholder &&
+          record.placeholder.parentNode
+        ) {
+          record.placeholder.parentNode.replaceChild(
+            el,
+            record.placeholder
+          );
+          return;
+        }
 
-      el.inert = original.inert;
+        // Fallback if the original placeholder was removed
+        // by a theme re-render while the lock was active.
+        if (record.parent && record.parent.isConnected) {
+          const reference =
+            record.nextSibling &&
+            record.nextSibling.parentNode === record.parent
+              ? record.nextSibling
+              : null;
 
-      if (original.ariaHidden === null) {
-        el.removeAttribute("aria-hidden");
-      } else {
-        el.setAttribute("aria-hidden", original.ariaHidden);
-      }
-
-      if (original.userSelect) {
-        el.style.userSelect = original.userSelect;
-      } else {
-        el.style.removeProperty("user-select");
-      }
-
-      if (original.pointerEvents) {
-        el.style.pointerEvents = original.pointerEvents;
-      } else {
-        el.style.removeProperty("pointer-events");
+          record.parent.insertBefore(el, reference);
+        }
+      } catch (_) {
+        // Keep recovery best-effort and avoid crashing the page.
       }
     });
 
-    state.protectedElements.clear();
+    state.detachedContent.clear();
 
-    document.documentElement.style.removeProperty("overflow");
-
-    if (document.body) {
-      document.body.style.removeProperty("overflow");
-    }
+    restorePageStyles();
   }
 
   // ==========================================================
-  // OVERLAY
+  // OVERLAY STYLES
   // ==========================================================
 
   function installStyles() {
-    if (document.getElementById(CONFIG.STYLE_ID)) return;
+    if (document.getElementById(CONFIG.STYLE_ID)) {
+      return;
+    }
 
     const style = document.createElement("style");
     style.id = CONFIG.STYLE_ID;
@@ -487,7 +616,7 @@
         isolation: isolate !important;
       }
 
-      #${CONFIG.OVERLAY_ID} .ag-v91-card {
+      #${CONFIG.OVERLAY_ID} .ag-v92-card {
         width: 100% !important;
         max-width: 470px !important;
         padding: 30px 24px !important;
@@ -525,28 +654,39 @@
       }
     `;
 
-    (document.head || document.documentElement).appendChild(style);
+    (document.head || document.documentElement).appendChild(
+      style
+    );
   }
+
+  // ==========================================================
+  // CREATE LOCK
+  // ==========================================================
 
   function createLock() {
     if (!document.body) return;
 
     installStyles();
 
-    let overlay = document.getElementById(CONFIG.OVERLAY_ID);
+    let overlay = document.getElementById(
+      CONFIG.OVERLAY_ID
+    );
 
     if (!overlay) {
       overlay = document.createElement("div");
       overlay.id = CONFIG.OVERLAY_ID;
       overlay.setAttribute("role", "dialog");
       overlay.setAttribute("aria-modal", "true");
-      overlay.setAttribute("aria-labelledby", "merayour-v91-heading");
+      overlay.setAttribute(
+        "aria-labelledby",
+        "merayour-v92-heading"
+      );
 
       const card = document.createElement("div");
-      card.className = "ag-v91-card";
+      card.className = "ag-v92-card";
 
       const heading = document.createElement("h2");
-      heading.id = "merayour-v91-heading";
+      heading.id = "merayour-v92-heading";
       heading.textContent = "Ad Blocker Detected!";
 
       const message = document.createElement("p");
@@ -566,6 +706,7 @@
       card.appendChild(heading);
       card.appendChild(message);
       card.appendChild(button);
+
       overlay.appendChild(card);
     }
 
@@ -574,41 +715,61 @@
     }
 
     state.locked = true;
-    protectContent();
 
-    // Re-apply content protection if the theme inserts
-    // additional matching article containers while locked.
-    if (!state.lockObserver && document.documentElement) {
+    // Remove article content from the active document tree.
+    detachContent();
+
+    // Watch for new content inserted by Blogger or the theme.
+    if (
+      !state.lockObserver &&
+      document.documentElement
+    ) {
       state.lockObserver = new MutationObserver(function () {
         if (!state.locked) return;
 
-        if (!document.getElementById(CONFIG.OVERLAY_ID)) {
+        let currentOverlay = document.getElementById(
+          CONFIG.OVERLAY_ID
+        );
+
+        if (!currentOverlay && document.body) {
           document.body.appendChild(overlay);
         }
 
-        protectContent();
+        detachContent();
       });
 
-      state.lockObserver.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-      });
+      state.lockObserver.observe(
+        document.documentElement,
+        {
+          childList: true,
+          subtree: true
+        }
+      );
     }
   }
 
-  function removeLock() {
-    const overlay = document.getElementById(CONFIG.OVERLAY_ID);
+  // ==========================================================
+  // REMOVE LOCK
+  // ==========================================================
 
-    if (overlay) overlay.remove();
+  function removeLock() {
+    state.locked = false;
 
     if (state.lockObserver) {
       state.lockObserver.disconnect();
       state.lockObserver = null;
     }
 
+    const overlay = document.getElementById(
+      CONFIG.OVERLAY_ID
+    );
+
+    if (overlay) {
+      overlay.remove();
+    }
+
     restoreContent();
 
-    state.locked = false;
     state.suspiciousSince = 0;
     state.healthySince = 0;
   }
@@ -623,9 +784,12 @@
 
     const elapsed = Date.now() - startedAt;
 
-    if (elapsed < CONFIG.INITIAL_GRACE) return;
+    if (elapsed < CONFIG.INITIAL_GRACE) {
+      return;
+    }
 
     const evidence = calculateEvidence();
+
     const suspicious =
       evidence.suspicious &&
       evidence.total >= CONFIG.DETECTION_THRESHOLD;
@@ -649,7 +813,6 @@
 
     state.suspiciousSince = 0;
 
-    // Require a continuous healthy period before unlocking.
     if (state.locked) {
       if (!state.healthySince) {
         state.healthySince = Date.now();
@@ -684,9 +847,11 @@
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init, {
-      once: true
-    });
+    document.addEventListener(
+      "DOMContentLoaded",
+      init,
+      { once: true }
+    );
   } else {
     init();
   }
