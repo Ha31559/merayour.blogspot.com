@@ -14,14 +14,14 @@
         GA4_ID: "G-ML091DD9QZ",
         ADSENSE_ID: "ca-pub-1011806586686442",
 
-        INITIAL_GRACE: 50,
-        SYSTEM_GRACE: 90,
+        INITIAL_GRACE: 5,
+        SYSTEM_GRACE: 9,
 
         CHECK_INTERVAL: 1,
-        FAILURE_CONFIRMATION: 200,
-        RECOVERY_CONFIRMATION: 400,
+        FAILURE_CONFIRMATION: 20,
+        RECOVERY_CONFIRMATION: 40,
 
-        FAILURE_CONFIRMATIONS: 2,
+        FAILURE_CONFIRMATIONS: 1,
 
         // Aggressive policy: either confirmed service failure
         // can trigger the warning.
