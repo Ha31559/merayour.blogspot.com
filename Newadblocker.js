@@ -1,24 +1,24 @@
 (function () {
   "use strict";
 
-  if (window.__MERAYOUR_EXTREME_V92__) return;
-  window.__MERAYOUR_EXTREME_V92__ = true;
+  if (window.__MERAYOUR_STABLE_V92__) return;
+  window.__MERAYOUR_STABLE_V92__ = true;
 
   // ==========================================================
-  // MERAYOUR ADGUARD V9.2 - EXTREME MULTI-VECTOR EDGE & OPERA BYPASS
+  // MERAYOUR ADGUARD V9.2 - STABLE HYBRID MASTER EDITION
   // ==========================================================
 
   const CONFIG = {
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    INITIAL_GRACE: 15000,    // 15 सेकंड शुरुआती छूट (और तेज)
-    SYSTEM_GRACE: 30000,     // 30 सेकंड सिस्टम ग्रेस पीरियड
-    CONFIRMATION_TIME: 1000, // 1 सेकंड पुष्टि का समय
+    INITIAL_GRACE: 25000,    // 25 सेकंड शुरुआती छूट
+    SYSTEM_GRACE: 60000,     // 60 सेकंड सिस्टम ग्रेस पीरियड
+    CONFIRMATION_TIME: 1500, // 1.5 सेकंड पुष्टि का समय
     RECOVERY_CONFIRMATION_TIME: 5000,
-    CHECK_INTERVAL: 400,     // एक्सट्रीम स्पीड जांच
+    CHECK_INTERVAL: 500,     // तेज रफ्तार जांच
 
-    DETECTION_THRESHOLD: 30, // और ज्यादा सेंसिटिव
+    DETECTION_THRESHOLD: 40, 
 
     OVERLAY_ID: "merayour-v92-lock",
     STYLE_ID: "merayour-v92-style",
@@ -47,8 +47,6 @@
     adUnfilled: false,
 
     baitTriggered: false,
-    networkBlocked: false,
-    extremeTamperDetected: false, // नया एक्सट्रीम पैच स्टेट
 
     suspiciousSince: 0,
     healthySince: 0,
@@ -62,100 +60,48 @@
     detachedContent: new Map(),
     savedPageStyles: null,
     lockInProgress: false,
-    baitHosts: [],
-    shadowBaits: []
+    baitElement: null
   };
 
   // ==========================================================
-  // 1. EXTREME MULTI-LAYERED SHADOW DOM BAITS (Edge और Opera के लिए)
+  // 1. STABLE & PROVEN HONEYPOT BAIT TRAP (जो Soul और Brave में 100% काम करता है)
   // ==========================================================
-  function plantExtremeBaits() {
-    if (state.baitHosts.length > 0) return;
-
-    const baitIDs = ["google_ads_iframe_net_trap_1", "aswift_0_box", "pub_300x250_deep_trap"];
+  function plantBait() {
+    if (document.getElementById("adsbygoogle-trap-box")) return;
     
-    baitIDs.forEach((id, index) => {
-      try {
-        const host = document.createElement("div");
-        host.id = "merayour-shadow-host-" + index;
-        host.style.cssText = "position:absolute !important; left:-9999px !important; top:-9999px !important; width:1px !important; height:1px !important; opacity:0.01 !important; pointer-events:none !important;";
-        
-        const shadow = host.attachShadow({ mode: 'open' });
-        const fakeAd = document.createElement("div");
-        fakeAd.id = id;
-        fakeAd.className = "adsbygoogle pub_300x250 text-ad banner-ad";
-        fakeAd.style.cssText = "width:300px !important; height:250px !important; display:block !important;";
-        fakeAd.innerHTML = '<iframe src="about:blank" style="width:100%;height:100%;"></iframe>';
-        
-        shadow.appendChild(fakeAd);
-        (document.body || document.documentElement).appendChild(host);
-        
-        state.baitHosts.push(host);
-        state.shadowBaits.push(fakeAd);
-      } catch (_) {}
-    });
+    try {
+      const bait = document.createElement("div");
+      bait.id = "adsbygoogle-trap-box";
+      bait.className = "adsbygoogle pub_300x250 pub_300x250_m text-ad textAd banner-ad";
+      bait.style.cssText = "width: 1px !important; height: 1px !important; position: absolute !important; left: -9999px !important; top: -9999px !important; opacity: 0.01 !important; pointer-events: none !important; z-index: -9999 !important;";
+      bait.innerHTML = "&nbsp;";
+      (document.body || document.documentElement).appendChild(bait);
+      state.baitElement = bait;
+    } catch (_) {}
   }
 
-  function checkExtremeBaits() {
-    if (state.baitHosts.length === 0) return false;
-    
-    for (let i = 0; i < state.baitHosts.length; i++) {
-      try {
-        const host = state.baitHosts[i];
-        const hostRect = host.getBoundingClientRect();
-        const style = window.getConfirmationStyle ? window.getConfirmationStyle(host) : window.getComputedStyle(host);
+  function checkBaitTrap() {
+    if (!state.baitElement) return false;
+    try {
+      const rect = state.baitElement.getBoundingClientRect();
+      const style = window.getComputedStyle(state.baitElement);
 
-        if (
-          style.display === "none" ||
-          style.visibility === "hidden" ||
-          style.opacity === "0" ||
-          hostRect.width === 0 ||
-          !host.isConnected
-        ) {
-          return true; // Edge या Opera का कोई एक्सटेंशन रंगे हाथ पकड़ा गया!
-        }
-      } catch (_) {}
-    }
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.opacity === "0" ||
+        rect.width === 0 ||
+        rect.height === 0 ||
+        !state.baitElement.isConnected
+      ) {
+        return true; // एड-ब्लॉकर रंगे हाथ पकड़ा गया!
+      }
+    } catch (_) {}
     return false;
   }
 
   // ==========================================================
-  // 2. EXTREME PROTOTYPE & NATIVE HOOK INTERCEPTION (Edge/Opera Target)
-  // ==========================================================
-  function watchExtremeTampering() {
-    try {
-      // अगर कोई एक्सटेंशन window.fetch या XMLHttpRequest को साइलेंटली ब्लॉक या क्रैश करे
-      const originalFetch = window.fetch;
-      if (originalFetch) {
-        window.fetch = function (...args) {
-          const url = (args[0] || "").toString().toLowerCase();
-          if (url.includes("google") || url.includes("analytics") || url.includes("googlesyndication")) {
-            return originalFetch.apply(this, args).catch(err => {
-              state.networkBlocked = true;
-              throw err;
-            });
-          }
-          return originalFetch.apply(this, args);
-        };
-      }
-    } catch (_) {}
-
-    // DOM API Tamper Check: यदि कोई एड-ब्लॉकर हमारे बनाए एलिमेंट्स के साथ छेड़छाड़ करता है
-    try {
-      const nativeRemove = Element.prototype.remove;
-      if (nativeRemove) {
-        Element.prototype.remove = function() {
-          if (this.id && (this.id.includes("trap") || this.id.includes("merayour"))) {
-            state.extremeTamperDetected = true;
-          }
-          return nativeRemove.apply(this, arguments);
-        };
-      }
-    } catch (_) {}
-  }
-
-  // ==========================================================
-  // 3. ENVIRONMENT & CORE SCRIPT MONITORING (पुराना लॉजिक सुरक्षित)
+  // 2. ENVIRONMENT & CORE SCRIPT MONITORING (पुराना लॉजिक सुरक्षित)
   // ==========================================================
   function isBloggerPreview() {
     const host = (location.hostname || "").toLowerCase();
@@ -240,21 +186,20 @@
   }
 
   // ==========================================================
-  // 4. CORE EVIDENCE & CONTENT DETACHMENT ENGINE (पुराना लॉजिक सुरक्षित)
+  // 3. CORE EVIDENCE & CONTENT DETACHMENT ENGINE (पुराना लॉजिक सुरक्षित)
   // ==========================================================
   function calculateEvidence() {
     const elapsed = Date.now() - startedAt;
     let gaScore = 0;
     let adScore = 0;
 
-    // अगर एक्सट्रीम हनीपॉट, नेटवर्क ब्लॉक या टैम्परिंग पकड़ी जाए
-    if (checkExtremeBaits() || state.networkBlocked || state.extremeTamperDetected) {
+    if (checkBaitTrap()) {
       state.baitTriggered = true;
-      gaScore = 100; 
+      gaScore = 100; // हनीपॉट ने पकड़ लिया तो सीधा मैक्सिमम स्कोर
     }
 
-    if (state.gaScriptFailed) gaScore = Math.max(gaScore, CONFIG.GA_SCRIPT_FAILURE || 50);
-    if (state.adsenseScriptFailed) adScore = Math.max(adScore, CONFIG.ADSENSE_SCRIPT_FAILURE || 50);
+    if (state.gaScriptFailed) gaScore = Math.max(gaScore, 50);
+    if (state.adsenseScriptFailed) adScore = Math.max(adScore, 50);
 
     const totalScore = Math.max(gaScore, adScore);
     return {
@@ -354,7 +299,7 @@
   }
 
   // ==========================================================
-  // 5. OVERLAY STYLES & FORCE LOCK (पुराना लॉजिक सुरक्षित)
+  // 4. OVERLAY STYLES & FORCE LOCK (पुराना लॉजिक सुरक्षित)
   // ==========================================================
   function installStyles() {
     if (document.getElementById(CONFIG.STYLE_ID)) return;
@@ -487,7 +432,7 @@
   }
 
   // ==========================================================
-  // 6. MAIN EVALUATION LOOP
+  // 5. MAIN EVALUATION LOOP (पुराना लॉजिक सुरक्षित)
   // ==========================================================
   function evaluate() {
     const evidence = calculateEvidence();
@@ -516,8 +461,7 @@
   }
 
   function init() {
-    plantExtremeBaits();
-    watchExtremeTampering();
+    plantBait();
     watchScripts();
     state.timer = window.setInterval(evaluate, CONFIG.CHECK_INTERVAL);
     evaluate();
@@ -530,4 +474,3 @@
   }
 
 })();
-
