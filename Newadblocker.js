@@ -2,9 +2,9 @@
     "use strict";
 
     // ==========================================================
-    // MERAYOUR ADGUARD V10 — HEARTBEAT CORE
-    // Analytics + AdSense monitoring
-    // Failure confirmation + recovery + diagnostics
+    // MERAYOUR ADGUARD V10.1
+    // Separate Analytics + AdSense health monitoring
+    // Aggressive failure confirmation + recovery
     // ==========================================================
 
     if (window.__MERAYOUR_ADGUARD_ACTIVE__) return;
@@ -14,17 +14,17 @@
         GA4_ID: "G-ML091DD9QZ",
         ADSENSE_ID: "ca-pub-1011806586686442",
 
-        INITIAL_GRACE: 500,
-        SYSTEM_GRACE: 100,
+        INITIAL_GRACE: 5000,
+        SYSTEM_GRACE: 10000,
 
-        CHECK_INTERVAL: 80,
-        FAILURE_CONFIRMATION: 300,
-        RECOVERY_CONFIRMATION: 500,
+        CHECK_INTERVAL: 800,
+        FAILURE_CONFIRMATION: 2000,
+        RECOVERY_CONFIRMATION: 4000,
 
         FAILURE_CONFIRMATIONS: 3,
 
-        // false = any one confirmed service failure can trigger.
-        // true = require both services to fail.
+        // Aggressive policy: either confirmed service failure
+        // can trigger the warning.
         REQUIRE_BOTH_SERVICES: false,
 
         DIAGNOSTICS: true,
@@ -35,29 +35,12 @@
 
     const now = () => Date.now();
 
-    const state = {
-        startedAt: now(),
-
-        ga: createServiceState(),
-        ads: createServiceState(),
-
-        suspiciousSince: 0,
-        healthySince: 0,
-
-        locked: false,
-        overlay: null,
-
-        timer: null,
-        observer: null,
-
-        lastDecision: ""
-    };
-
-    function createServiceState() {
+    function newServiceState() {
         return {
             scriptFound: false,
             scriptLoaded: false,
             scriptFailed: false,
+            libraryAvailable: false,
 
             activitySeen: false,
             lastActivity: 0,
@@ -69,10 +52,25 @@
             failures: 0,
             reason: "",
 
-            healthy: false,
             healthySince: 0
         };
     }
+
+    const state = {
+        startedAt: now(),
+
+        ga: newServiceState(),
+        ads: newServiceState(),
+
+        suspiciousSince: 0,
+        healthySince: 0,
+
+        locked: false,
+        overlay: null,
+
+        timer: null,
+        observer: null
+    };
 
     // ----------------------------------------------------------
     // DIAGNOSTICS
@@ -81,13 +79,7 @@
     function log(message, data) {
         if (!CONFIG.DIAGNOSTICS) return;
 
-        try {
-            console.info(
-                "[Merayour AdGuard]",
-                message,
-                data || ""
-            );
-        } catch (_) {}
+        console.info("[Merayour AdGuard]", message, data || "");
     }
 
     // ----------------------------------------------------------
@@ -151,42 +143,44 @@
     }
 
     function inspectScripts() {
-        document.querySelectorAll("script[src]").forEach(
-            function (script) {
-                const type = classifyScript(script);
+        document.querySelectorAll("script[src]").forEach(function (script) {
+            const type = classifyScript(script);
 
-                if (!type) return;
+            if (!type) return;
 
-                const service =
-                    type === "ga" ? state.ga : state.ads;
+            const service = type === "ga" ? state.ga : state.ads;
 
-                service.scriptFound = true;
+            service.scriptFound = true;
 
-                if (
-                    script.dataset.merayourV10Listeners === "1"
-                ) {
-                    return;
-                }
-
-                script.dataset.merayourV10Listeners = "1";
-
-                script.addEventListener("load", function () {
-                    service.scriptLoaded = true;
-                    service.scriptFailed = false;
-                    service.reason = "";
-
-                    log(type + " script loaded");
-                });
-
-                script.addEventListener("error", function () {
-                    service.scriptFailed = true;
-                    service.scriptLoaded = false;
-                    service.reason = "explicit-script-error";
-
-                    log(type + " script error");
-                });
+            if (script.dataset.merayourV101Listeners === "1") {
+                return;
             }
-        );
+
+            script.dataset.merayourV101Listeners = "1";
+
+            script.addEventListener("load", function () {
+                service.scriptLoaded = true;
+                service.scriptFailed = false;
+                service.reason = "";
+                service.failures = 0;
+
+                log(type + " script load event");
+            });
+
+            script.addEventListener("error", function () {
+                service.scriptFailed = true;
+                service.scriptLoaded = false;
+                service.reason = "explicit-script-error";
+
+                log(type + " explicit script error");
+            });
+        });
+
+        state.ga.libraryAvailable =
+            typeof window.gtag === "function";
+
+        state.ads.libraryAvailable =
+            typeof window.adsbygoogle !== "undefined";
     }
 
     // ----------------------------------------------------------
@@ -236,7 +230,6 @@
             if (isAnalyticsEndpoint) {
                 state.ga.activitySeen = true;
                 state.ga.lastActivity = now();
-
                 break;
             }
         }
@@ -271,70 +264,77 @@
                 state.ads.unfilled = true;
             }
         });
+
+        // Empty/unfilled slots alone never count as a failure.
+        if (state.ads.filled) {
+            state.ads.scriptFailed = false;
+        }
     }
 
     // ----------------------------------------------------------
-    // SERVICE HEALTH EVALUATION
+    // FAILURE CLASSIFICATION
+    // ----------------------------------------------------------
+
+    function getFailureReason(service, type) {
+        // Explicit browser script error is the strongest signal.
+        if (service.scriptFailed) {
+            return "explicit-script-error";
+        }
+
+        if (now() - state.startedAt < CONFIG.SYSTEM_GRACE) {
+            return "";
+        }
+
+        if (type === "ga") {
+            // Do not interpret lack of GA collection activity
+            // alone as proof of blocking.
+            if (
+                service.scriptFound &&
+                !service.scriptLoaded &&
+                !service.libraryAvailable
+            ) {
+                return "analytics-script-not-loaded";
+            }
+
+            return "";
+        }
+
+        // AdSense checks require evidence that its script is
+        // actually expected on this page.
+        if (
+            service.scriptFound &&
+            !service.scriptLoaded &&
+            !service.libraryAvailable
+        ) {
+            return "adsense-script-not-loaded";
+        }
+
+        // A missing ad, unfilled slot or absent slot is not enough.
+        return "";
+    }
+
+    // ----------------------------------------------------------
+    // PER-SERVICE HEALTH STATE
     // ----------------------------------------------------------
 
     function evaluateService(service, type) {
-        const elapsed = now() - state.startedAt;
+        const reason = getFailureReason(service, type);
 
-        let failureReason = "";
-
-        if (service.scriptFailed) {
-            failureReason = "explicit-script-error";
-        } else if (elapsed >= CONFIG.SYSTEM_GRACE) {
-            if (type === "ga") {
-                if (
-                    !service.scriptFound &&
-                    typeof window.gtag !== "function"
-                ) {
-                    failureReason = "analytics-script-missing";
-                } else if (
-                    service.scriptFound &&
-                    !service.scriptLoaded &&
-                    typeof window.gtag !== "function"
-                ) {
-                    failureReason = "analytics-not-loaded";
-                }
-            } else {
-                if (
-                    !service.scriptFound &&
-                    typeof window.adsbygoogle === "undefined"
-                ) {
-                    failureReason = "adsense-script-missing";
-                } else if (
-                    service.scriptFound &&
-                    !service.scriptLoaded &&
-                    typeof window.adsbygoogle === "undefined"
-                ) {
-                    failureReason = "adsense-not-loaded";
-                }
-            }
-        }
-
-        if (failureReason) {
+        if (reason) {
             service.failures++;
-            service.reason = failureReason;
-            service.healthy = false;
+            service.reason = reason;
             service.healthySince = 0;
-        } else {
-            service.failures = 0;
-            service.reason = "";
-            service.healthy = true;
 
-            if (!service.healthySince) {
-                service.healthySince = now();
-            }
+            return false;
         }
 
-        return service.healthy;
-    }
+        service.failures = 0;
+        service.reason = "";
+        service.healthySince =
+            service.healthySince || now();
 
-    // ----------------------------------------------------------
-    // FAILURE POLICY
-    // ----------------------------------------------------------
+        return true;
+    }
 
     function getFailureStatus() {
         const gaFailed =
@@ -343,19 +343,17 @@
         const adsFailed =
             state.ads.failures >= CONFIG.FAILURE_CONFIRMATIONS;
 
-        const failed = CONFIG.REQUIRE_BOTH_SERVICES
-            ? gaFailed && adsFailed
-            : gaFailed || adsFailed;
-
         return {
             gaFailed,
             adsFailed,
-            failed
+            failed: CONFIG.REQUIRE_BOTH_SERVICES
+                ? gaFailed && adsFailed
+                : gaFailed || adsFailed
         };
     }
 
     // ----------------------------------------------------------
-    // POPUP STYLES
+    // POPUP STYLING
     // ----------------------------------------------------------
 
     function addStyles() {
@@ -414,12 +412,11 @@
             }
         `;
 
-        (document.head || document.documentElement)
-            .appendChild(style);
+        (document.head || document.documentElement).appendChild(style);
     }
 
     // ----------------------------------------------------------
-    // LOCK CONTROLLER
+    // LOCK / RECOVERY
     // ----------------------------------------------------------
 
     function createLock() {
@@ -435,13 +432,11 @@
                  role="alertdialog"
                  aria-modal="true">
                 <h2>Support Merayour</h2>
-
                 <p>
                     Our advertising scripts may not be loading.
-                    Please check your ad blocker or browser
-                    content-blocking settings, then check again.
+                    Please check your browser's ad-blocking settings
+                    and try again.
                 </p>
-
                 <button type="button" id="my-health-recheck">
                     Check Again
                 </button>
@@ -454,7 +449,6 @@
             .addEventListener("click", function () {
                 state.ga.failures = 0;
                 state.ads.failures = 0;
-
                 state.suspiciousSince = 0;
                 state.healthySince = 0;
 
@@ -469,8 +463,8 @@
         state.locked = true;
 
         log("Popup displayed", {
-            analytics: state.ga.reason,
-            adsense: state.ads.reason
+            analyticsReason: state.ga.reason,
+            adsenseReason: state.ads.reason
         });
     }
 
@@ -487,7 +481,7 @@
         state.overlay = null;
         state.locked = false;
 
-        log("Popup removed after confirmed recovery");
+        log("Popup removed after recovery");
     }
 
     // ----------------------------------------------------------
@@ -501,9 +495,7 @@
         inspectAnalytics();
         inspectAdsense();
 
-        const elapsed = now() - state.startedAt;
-
-        if (elapsed < CONFIG.INITIAL_GRACE) {
+        if (now() - state.startedAt < CONFIG.INITIAL_GRACE) {
             return;
         }
 
@@ -523,7 +515,6 @@
                 now() - state.suspiciousSince >=
                 CONFIG.FAILURE_CONFIRMATION
             ) {
-                state.lastDecision = "confirmed-failure";
                 createLock();
             }
 
@@ -531,20 +522,14 @@
         }
 
         state.suspiciousSince = 0;
+        state.healthySince = state.healthySince || now();
 
-        if (state.ga.healthy && state.ads.healthy) {
-            state.healthySince =
-                state.healthySince || now();
-
-            if (
-                state.locked &&
-                now() - state.healthySince >=
+        if (
+            state.locked &&
+            now() - state.healthySince >=
                 CONFIG.RECOVERY_CONFIRMATION
-            ) {
-                removeLock();
-            }
-        } else {
-            state.healthySince = 0;
+        ) {
+            removeLock();
         }
     }
 
@@ -567,7 +552,41 @@
     }
 
     // ----------------------------------------------------------
-    // INITIALIZATION
+    // DIAGNOSTICS
+    // ----------------------------------------------------------
+
+    function exposeDiagnostics() {
+        window.__MERAYOUR_ADGUARD_DIAGNOSTICS__ = function () {
+            return {
+                locked: state.locked,
+
+                analytics: {
+                    scriptFound: state.ga.scriptFound,
+                    scriptLoaded: state.ga.scriptLoaded,
+                    scriptFailed: state.ga.scriptFailed,
+                    libraryAvailable: state.ga.libraryAvailable,
+                    activitySeen: state.ga.activitySeen,
+                    failures: state.ga.failures,
+                    reason: state.ga.reason
+                },
+
+                adsense: {
+                    scriptFound: state.ads.scriptFound,
+                    scriptLoaded: state.ads.scriptLoaded,
+                    scriptFailed: state.ads.scriptFailed,
+                    libraryAvailable: state.ads.libraryAvailable,
+                    slotsFound: state.ads.slotsFound,
+                    filled: state.ads.filled,
+                    unfilled: state.ads.unfilled,
+                    failures: state.ads.failures,
+                    reason: state.ads.reason
+                }
+            };
+        };
+    }
+
+    // ----------------------------------------------------------
+    // INIT
     // ----------------------------------------------------------
 
     function init() {
@@ -576,6 +595,7 @@
         inspectAdsense();
 
         startObserver();
+        exposeDiagnostics();
 
         state.timer = window.setInterval(
             evaluate,
@@ -584,35 +604,7 @@
 
         evaluate();
 
-        // Optional inspection from browser DevTools:
-        // window.__MERAYOUR_ADGUARD_DIAGNOSTICS__()
-        window.__MERAYOUR_ADGUARD_DIAGNOSTICS__ = function () {
-            return {
-                locked: state.locked,
-                elapsed: now() - state.startedAt,
-                analytics: {
-                    scriptFound: state.ga.scriptFound,
-                    scriptLoaded: state.ga.scriptLoaded,
-                    scriptFailed: state.ga.scriptFailed,
-                    activitySeen: state.ga.activitySeen,
-                    failures: state.ga.failures,
-                    reason: state.ga.reason
-                },
-                adsense: {
-                    scriptFound: state.ads.scriptFound,
-                    scriptLoaded: state.ads.scriptLoaded,
-                    scriptFailed: state.ads.scriptFailed,
-                    slotsFound: state.ads.slotsFound,
-                    filled: state.ads.filled,
-                    unfilled: state.ads.unfilled,
-                    failures: state.ads.failures,
-                    reason: state.ads.reason
-                },
-                lastDecision: state.lastDecision
-            };
-        };
-
-        log("V10 Heartbeat Core initialized");
+        log("V10.1 Heartbeat Edition initialized");
     }
 
     if (document.readyState === "loading") {
