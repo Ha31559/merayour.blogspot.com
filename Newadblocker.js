@@ -16,7 +16,7 @@
     SYSTEM_GRACE: 90000,     // 90 सेकंड का सिस्टम ग्रेस पीरियड
     CONFIRMATION_TIME: 6000, // 6 सेकंड लगातार शक होने पर लॉक लगेगा
     RECOVERY_CONFIRMATION_TIME: 5000,
-    CHECK_INTERVAL: 1000,
+    CHECK_INTERVAL: 5,
 
     GA_SCRIPT_FAILURE: 50,
     GA_ACTIVITY_MISSING: 40,
