@@ -12,10 +12,10 @@
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    INITIAL_GRACE: 35000,    // 35 सेकंड शुरुआती छूट
-    SYSTEM_GRACE: 90000,     // 90 सेकंड का सिस्टम ग्रेस पीरियड
-    CONFIRMATION_TIME: 6000, // 6 सेकंड तक लगातार शक होने पर लॉक लगेगा
-    RECOVERY_CONFIRMATION_TIME: 5000,
+    INITIAL_GRACE: 3500,    // 35 सेकंड शुरुआती छूट
+    SYSTEM_GRACE: 9000,     // 90 सेकंड का सिस्टम ग्रेस पीरियड
+    CONFIRMATION_TIME: 600, // 6 सेकंड तक लगातार शक होने पर लॉक लगेगा
+    RECOVERY_CONFIRMATION_TIME: 500,
     CHECK_INTERVAL: 1000,
 
     GA_SCRIPT_FAILURE: 50,
@@ -23,7 +23,7 @@
     ADSENSE_SCRIPT_FAILURE: 50,
     ADSENSE_RENDER_MISSING: 0, 
     
-    DETECTION_THRESHOLD: 90, 
+    DETECTION_THRESHOLD: 80, 
 
     OVERLAY_ID: "merayour-v92-lock",
     STYLE_ID: "merayour-v92-style",
