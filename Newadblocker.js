@@ -15,8 +15,8 @@
 
     INITIAL_GRACE: 0,    // 0 सेकंड शुरुआती छूट
     SYSTEM_GRACE: 0,     // 0 सेकंड सिस्टम ग्रेस पीरियड
-    CONFIRMATION_TIME: 200, // 0.2 सेकंड पुष्टि का समय
-    RECOVERY_CONFIRMATION_TIME: 5000,
+    CONFIRMATION_TIME: 0, // 0 सेकंड पुष्टि का समय
+    RECOVERY_CONFIRMATION_TIME: 50,
     CHECK_INTERVAL: 100,     // तेज रफ्तार जांच
 
     GA_SCRIPT_FAILURE: 45,
