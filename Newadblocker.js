@@ -13,11 +13,11 @@
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    INITIAL_GRACE: 30000,    // 30 सेकंड शुरुआती छूट
-    SYSTEM_GRACE: 60000,     // 60 सेकंड सिस्टम ग्रेस पीरियड
-    CONFIRMATION_TIME: 1500, // 1.5 सेकंड पुष्टि का समय
-    RECOVERY_CONFIRMATION_TIME: 5000,
-    CHECK_INTERVAL: 600,     // तेज रफ्तार जांच
+    INITIAL_GRACE: 3000,    // 30 सेकंड शुरुआती छूट
+    SYSTEM_GRACE: 6000,     // 60 सेकंड सिस्टम ग्रेस पीरियड
+    CONFIRMATION_TIME: 150, // 1.5 सेकंड पुष्टि का समय
+    RECOVERY_CONFIRMATION_TIME: 4000,
+    CHECK_INTERVAL: 100,     // तेज रफ्तार जांच
 
     GA_SCRIPT_FAILURE: 50,
     GA_ACTIVITY_MISSING: 40,
