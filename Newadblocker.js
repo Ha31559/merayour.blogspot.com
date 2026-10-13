@@ -1,30 +1,24 @@
 (function () {
   "use strict";
 
-  if (window.__MERAYOUR_ULTIMATE_MASTER_V92__) return;
-  window.__MERAYOUR_ULTIMATE_MASTER_V92__ = true;
+  if (window.__MERAYOUR_ULTIMATE_V92__) return;
+  window.__MERAYOUR_ULTIMATE_V92__ = true;
 
   // ==========================================================
-  // MERAYOUR ADGUARD V9.2 - ULTIMATE STABLE MASTER EDITION
-  // (All original core features + stable sequential layering)
+  // MERAYOUR ADGUARD V9.2 - EDGE, OPERA & FIREFOX TARGETED EDITION
   // ==========================================================
 
   const CONFIG = {
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    INITIAL_GRACE: 0,    // 0 सेकंड शुरुआती छूट
-    SYSTEM_GRACE: 0,     // 0 सेकंड सिस्टम ग्रेस पीरियड
-    CONFIRMATION_TIME: 0, // 0 सेकंड पुष्टि का समय
-    RECOVERY_CONFIRMATION_TIME: 50,
-    CHECK_INTERVAL: 100,     // तेज रफ्तार जांच
+    INITIAL_GRACE: 20000, // 20 सेकंड शुरुआती छूट
+    SYSTEM_GRACE: 45000, // 45 सेकंड सिस्टम ग्रेस पीरियड
+    CONFIRMATION_TIME: 1500, // 1.5 सेकंड पुष्टि का समय
+    RECOVERY_CONFIRMATION_TIME: 5000,
+    CHECK_INTERVAL: 500, // और तेज रफ्तार जांच
 
-    GA_SCRIPT_FAILURE: 45,
-    GA_ACTIVITY_MISSING: 40,
-    ADSENSE_SCRIPT_FAILURE: 50,
-    ADSENSE_RENDER_MISSING: 0, 
-    
-    DETECTION_THRESHOLD: 30, 
+    DETECTION_THRESHOLD: 40, // थोड़ा और सख्त ताकि तुरंत पकड़ में आए
 
     OVERLAY_ID: "merayour-v92-lock",
     STYLE_ID: "merayour-v92-style",
@@ -53,6 +47,7 @@
     adUnfilled: false,
 
     baitTriggered: false,
+    networkBlocked: false, // नया पैच: नेटवर्क साइलेंट ब्लॉकिंग ट्रैक करने के लिए
 
     suspiciousSince: 0,
     healthySince: 0,
@@ -66,16 +61,92 @@
     detachedContent: new Map(),
     savedPageStyles: null,
     lockInProgress: false,
-    baitElement: null
+    baitHost: null,
+    shadowBait: null
   };
 
   // ==========================================================
-  // 1. ENVIRONMENT CHECK
+  // 1. ADVANCED SHADOW DOM BAIT TRAP
+  // ==========================================================
+  function plantShadowBait() {
+    if (document.getElementById("merayour-shadow-host")) return;
+    
+    try {
+      const host = document.createElement("div");
+      host.id = "merayour-shadow-host";
+      host.style.cssText = "position:absolute !important; left:-9999px !important; top:-9999px !important; width:1px !important; height:1px !important; opacity:0.01 !important; pointer-events:none !important;";
+      
+      const shadow = host.attachShadow({ mode: 'open' });
+      const fakeAd = document.createElement("div");
+      fakeAd.id = "google_ads_iframe_net_trap";
+      fakeAd.className = "adsbygoogle pub_300x250 text-ad";
+      fakeAd.style.cssText = "width:300px !important; height:250px !important; display:block !important;";
+      fakeAd.innerHTML = '<iframe src="about:blank" style="width:100%;height:100%;"></iframe>';
+      
+      shadow.appendChild(fakeAd);
+      (document.body || document.documentElement).appendChild(host);
+      
+      state.baitHost = host;
+      state.shadowBait = fakeAd;
+    } catch (_) {}
+  }
+
+  function checkShadowBaitTrap() {
+    if (!state.baitHost || !state.shadowBait) return false;
+    try {
+      const hostRect = state.baitHost.getBoundingClientRect();
+      const style = window.getComputedStyle(state.baitHost);
+
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.opacity === "0" ||
+        hostRect.width === 0 ||
+        !state.baitHost.isConnected
+      ) {
+        return true; 
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  // ==========================================================
+  // 2. EDGE, OPERA & FIREFOX TARGETED NETWORK & API SNIFFER (NEW PATCH)
+  // ये ब्राउज़र और एक्सटेंशन साइलेंटली रिक्वेस्ट ब्लॉक करते हैं, इन्हें यहाँ पकड़ेंगे
+  // ==========================================================
+  function watchNetworkBlocks() {
+    try {
+      // Fetch API को हुक करना ताकि अगर कोई एक्सटेंशन गूगल या एनालिटिक्स की कॉल रोके तो पता चले
+      const originalFetch = window.fetch;
+      if (originalFetch) {
+        window.fetch = function (...args) {
+          const url = (args[0] || "").toString().toLowerCase();
+          if (url.includes("google-analytics.com") || url.includes("googlesyndication.com") || url.includes("googletagmanager.com")) {
+            // अगर रिक्वेस्ट करने पर तुरंत फेम या ब्लॉक का रिस्पॉन्स आए या कैंसल हो
+            return originalFetch.apply(this, args).catch(err => {
+              state.networkBlocked = true;
+              throw err;
+            });
+          }
+          return originalFetch.apply(this, args);
+        };
+      }
+    } catch (_) {}
+
+    // ग्लोबल एडसेंस और विज्ञापन ऑब्जेक्ट्स की ताक-झांक (Edge/Firefox एक्सटेंशन इन्हें मॉडिफाई कर देते हैं)
+    try {
+      if (window.adsbygoogle && typeof window.adsbygoogle.loaded === "undefined" && navigator.userAgent.indexOf("Firefox") !== -1) {
+        state.networkBlocked = true;
+      }
+    } catch (_) {}
+  }
+
+  // ==========================================================
+  // 3. ENVIRONMENT & CORE SCRIPT MONITORING (पुराना लॉजिक सुरक्षित)
   // ==========================================================
   function isBloggerPreview() {
     const host = (location.hostname || "").toLowerCase();
     const search = (location.search || "").toLowerCase();
-
     return (
       host === "blogger.com" ||
       host.endsWith(".blogger.com") ||
@@ -85,27 +156,15 @@
 
   if (isBloggerPreview()) return;
 
-  // ==========================================================
-  // 2. SCRIPT CLASSIFICATION & WATCHERS (Original Core)
-  // ==========================================================
   function classifyScript(src) {
     if (!src) return "";
     const url = src.toLowerCase();
-
-    if (
-      url.includes("googletagmanager.com/gtag/js") &&
-      url.includes(CONFIG.GA4_ID.toLowerCase())
-    ) {
+    if (url.includes("googletagmanager.com/gtag/js") && url.includes(CONFIG.GA4_ID.toLowerCase())) {
       return "GA4";
     }
-
-    if (
-      url.includes("googlesyndication.com/pagead/js/adsbygoogle.js") &&
-      url.includes(CONFIG.ADSENSE_ID.toLowerCase())
-    ) {
+    if (url.includes("googlesyndication.com/pagead/js/adsbygoogle.js") && url.includes(CONFIG.ADSENSE_ID.toLowerCase())) {
       return "ADSENSE";
     }
-
     return "";
   }
 
@@ -113,15 +172,11 @@
     if (!script || !script.src) return;
     const type = classifyScript(script.src);
     if (!type) return;
+    if (script.dataset.merayourWatched === "1") return;
+    script.dataset.merayourWatched = "1";
 
-    if (script.dataset.merayourV92Watched === "1") return;
-    script.dataset.merayourV92Watched = "1";
-
-    if (type === "GA4") {
-      state.gaScriptFound = true;
-    } else {
-      state.adsenseScriptFound = true;
-    }
+    if (type === "GA4") state.gaScriptFound = true;
+    else state.adsenseScriptFound = true;
 
     script.addEventListener("load", function () {
       if (type === "GA4") {
@@ -134,18 +189,14 @@
     }, { once: true });
 
     script.addEventListener("error", function () {
-      if (type === "GA4") {
-        state.gaScriptFailed = true;
-      } else {
-        state.adsenseScriptFailed = true;
-      }
+      if (type === "GA4") state.gaScriptFailed = true;
+      else state.adsenseScriptFailed = true;
     }, { once: true });
   }
 
   window.addEventListener("error", function (event) {
     const target = event.target;
     if (!target || target.tagName !== "SCRIPT") return;
-
     const type = classifyScript(target.src || "");
     if (type === "GA4") {
       state.gaScriptFound = true;
@@ -164,9 +215,7 @@
       records.forEach(function (record) {
         record.addedNodes.forEach(function (node) {
           if (node.nodeType !== 1) return;
-          if (node.tagName === "SCRIPT") {
-            attachScriptListeners(node);
-          }
+          if (node.tagName === "SCRIPT") attachScriptListeners(node);
           if (node.querySelectorAll) {
             node.querySelectorAll("script[src]").forEach(attachScriptListeners);
           }
@@ -174,110 +223,33 @@
       });
     });
 
-    state.observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true
-    });
+    state.observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   // ==========================================================
-  // 3. GA4 & ADSENSE INSPECTORS (Original Core)
-  // ==========================================================
-  function isGAResource(url) {
-    if (!url) return false;
-    const value = url.toLowerCase();
-    return (
-      value.includes("google-analytics.com/g/collect") ||
-      value.includes("analytics.google.com/g/collect") ||
-      value.includes("region1.google-analytics.com/g/collect") ||
-      value.includes("google-analytics.com/collect")
-    );
-  }
-
-  function inspectGAResources() {
-    try {
-      performance.getEntriesByType("resource").forEach(function (entry) {
-        if (isGAResource(entry.name)) {
-          state.gaActivitySeen = true;
-        }
-      });
-    } catch (_) {}
-  }
-
-  function watchGAResources() {
-    if (!("PerformanceObserver" in window)) return;
-    try {
-      state.gaObserver = new PerformanceObserver(function (list) {
-        list.getEntries().forEach(function (entry) {
-          if (isGAResource(entry.name)) {
-            state.gaActivitySeen = true;
-          }
-        });
-      });
-      state.gaObserver.observe({ type: "resource", buffered: true });
-    } catch (_) {}
-  }
-
-  function inspectAdSlots() {
-    const selector = 'ins.adsbygoogle[data-ad-client="' + CONFIG.ADSENSE_ID + '"]';
-    const slots = document.querySelectorAll(selector);
-    state.adSlotsFound = slots.length > 0;
-
-    let filled = false;
-    let unfilled = false;
-
-    slots.forEach(function (slot) {
-      const status = (slot.getAttribute("data-ad-status") || "").toLowerCase();
-      if (status === "filled") filled = true;
-      if (status === "unfilled") unfilled = true;
-
-      const iframe = slot.querySelector("iframe");
-      if (iframe && status === "filled") {
-        const rect = iframe.getBoundingClientRect();
-        const style = getComputedStyle(iframe);
-        if (
-          rect.width >= 10 &&
-          rect.height >= 10 &&
-          style.display !== "none" &&
-          style.visibility !== "hidden"
-        ) {
-          filled = true;
-        }
-      }
-    });
-
-    state.adFilled = filled;
-    state.adUnfilled = unfilled;
-  }
-
-  // ==========================================================
-  // 4. EVIDENCE ENGINE (Original Core)
+  // 4. CORE EVIDENCE & CONTENT DETACHMENT ENGINE
   // ==========================================================
   function calculateEvidence() {
     const elapsed = Date.now() - startedAt;
     let gaScore = 0;
     let adScore = 0;
 
-    if (state.gaScriptFailed) gaScore += CONFIG.GA_SCRIPT_FAILURE;
-    if (state.adsenseScriptFailed) adScore += CONFIG.ADSENSE_SCRIPT_FAILURE;
-
-    if (elapsed >= CONFIG.SYSTEM_GRACE) {
-      if (typeof window.gtag === "undefined") gaScore += 50;
-      if (typeof window.adsbygoogle === "undefined") adScore += 50;
+    // शैडो हनीपॉट या नेटवर्क साइलेंट ब्लॉकिंग (Edge/Firefox/Opera के लिए) पकड़े जाने पर
+    if (checkShadowBaitTrap() || state.networkBlocked) {
+      state.baitTriggered = true;
+      gaScore = 100; 
     }
+
+    if (state.gaScriptFailed) gaScore = Math.max(gaScore, CONFIG.GA_SCRIPT_FAILURE || 50);
+    if (state.adsenseScriptFailed) adScore = Math.max(adScore, CONFIG.ADSENSE_SCRIPT_FAILURE || 50);
 
     const totalScore = Math.max(gaScore, adScore);
     return {
-      ga: gaScore,
-      adsense: adScore,
       total: totalScore,
-      suspicious: totalScore >= CONFIG.DETECTION_THRESHOLD && elapsed >= CONFIG.SYSTEM_GRACE
+      suspicious: totalScore >= CONFIG.DETECTION_THRESHOLD && elapsed >= CONFIG.INITIAL_GRACE
     };
   }
 
-  // ==========================================================
-  // 5. CONTENT CANDIDATES & DOM DETACHMENT (Original Core)
-  // ==========================================================
   function getContentCandidates() {
     for (let i = 0; i < CONFIG.CONTENT_SELECTORS.length; i++) {
       const selector = CONFIG.CONTENT_SELECTORS[i];
@@ -309,7 +281,6 @@
   function detachContent() {
     if (state.lockInProgress) return;
     state.lockInProgress = true;
-
     try {
       getContentCandidates().forEach(function (el) {
         if (!el.parentNode || !el.isConnected) return;
@@ -317,7 +288,6 @@
         const nextSibling = el.nextSibling;
         const placeholder = document.createComment("Merayour content temporarily locked");
         const record = { placeholder: placeholder, parent: parent, nextSibling: nextSibling };
-
         try {
           parent.replaceChild(placeholder, el);
           state.detachedContent.set(el, record);
@@ -353,7 +323,6 @@
         }
       } catch (_) {}
     });
-
     state.detachedContent.clear();
 
     if (state.savedPageStyles) {
@@ -362,23 +331,20 @@
       } else {
         document.documentElement.style.removeProperty("overflow");
       }
-      if (document.body) {
-        if (state.savedPageStyles.bodyOverflow) {
-          document.body.style.setProperty("overflow", state.savedPageStyles.bodyOverflow);
-        } else {
-          document.body.style.removeProperty("overflow");
-        }
+      if (document.body && state.savedPageStyles.bodyOverflow) {
+        document.body.style.setProperty("overflow", state.savedPageStyles.bodyOverflow);
+      } else if (document.body) {
+        document.body.style.removeProperty("overflow");
       }
       state.savedPageStyles = null;
     }
   }
 
   // ==========================================================
-  // 6. OVERLAY & LOCK SYSTEM (Original Core)
+  // 5. OVERLAY STYLES & FORCE LOCK
   // ==========================================================
   function installStyles() {
     if (document.getElementById(CONFIG.STYLE_ID)) return;
-
     const style = document.createElement("style");
     style.id = CONFIG.STYLE_ID;
     style.textContent = `
@@ -435,7 +401,6 @@
         cursor: pointer !important;
       }
     `;
-
     (document.head || document.documentElement).appendChild(style);
   }
 
@@ -444,7 +409,6 @@
     installStyles();
 
     let overlay = document.getElementById(CONFIG.OVERLAY_ID);
-
     if (!overlay) {
       overlay = document.createElement("div");
       overlay.id = CONFIG.OVERLAY_ID;
@@ -498,73 +462,22 @@
 
   function removeLock() {
     state.locked = false;
-
     if (state.lockObserver) {
       state.lockObserver.disconnect();
       state.lockObserver = null;
     }
-
     const overlay = document.getElementById(CONFIG.OVERLAY_ID);
     if (overlay) overlay.remove();
-
     restoreContent();
-
     state.suspiciousSince = 0;
     state.healthySince = 0;
   }
 
   // ==========================================================
-  // 7. STABLE HONEYPOT BAIT TRAP (The Proven Soul Browser Killer)
-  // ==========================================================
-  function plantBait() {
-    if (document.getElementById("adsbygoogle-trap-box")) return;
-    try {
-      const bait = document.createElement("div");
-      bait.id = "adsbygoogle-trap-box";
-      bait.className = "adsbygoogle pub_300x250 pub_300x250_m text-ad textAd banner-ad";
-      bait.style.cssText = "width: 1px !important; height: 1px !important; position: absolute !important; left: -9999px !important; top: -9999px !important; opacity: 0.01 !important; pointer-events: none !important; z-index: -9999 !important;";
-      bait.innerHTML = "&nbsp;";
-      (document.body || document.documentElement).appendChild(bait);
-      state.baitElement = bait;
-    } catch (_) {}
-  }
-
-  function checkBaitTrap() {
-    if (!state.baitElement) return false;
-    try {
-      const rect = state.baitElement.getBoundingClientRect();
-      const style = window.getComputedStyle(state.baitElement);
-
-      if (
-        style.display === "none" ||
-        style.visibility === "hidden" ||
-        style.opacity === "0" ||
-        rect.width === 0 ||
-        rect.height === 0 ||
-        !state.baitElement.isConnected
-      ) {
-        return true; 
-      }
-    } catch (_) {}
-    return false;
-  }
-
-  // ==========================================================
-  // 8. MAIN EVALUATION LOOP
+  // 6. MAIN EVALUATION LOOP
   // ==========================================================
   function evaluate() {
-    inspectGAResources();
-    inspectAdSlots();
-
-    const elapsed = Date.now() - startedAt;
-    if (elapsed < CONFIG.INITIAL_GRACE) return;
-
     const evidence = calculateEvidence();
-    const baitCaught = checkBaitTrap();
-
-    if (baitCaught) {
-      state.baitTriggered = true;
-    }
 
     if (evidence.suspicious || state.baitTriggered) {
       state.healthySince = 0;
@@ -579,29 +492,20 @@
     }
 
     state.suspiciousSince = 0;
-
     if (state.locked && !state.baitTriggered) {
       if (!state.healthySince) {
         state.healthySince = Date.now();
       }
-
       if (Date.now() - state.healthySince >= CONFIG.RECOVERY_CONFIRMATION_TIME) {
         removeLock();
       }
     }
   }
 
-  // ==========================================================
-  // 9. INITIALIZATION (Sequential & Safe)
-  // ==========================================================
   function init() {
+    plantShadowBait();
+    watchNetworkBlocks(); // नया पैच एक्टिव किया गया
     watchScripts();
-    watchGAResources();
-    plantBait();
-
-    inspectGAResources();
-    inspectAdSlots();
-
     state.timer = window.setInterval(evaluate, CONFIG.CHECK_INTERVAL);
     evaluate();
   }
