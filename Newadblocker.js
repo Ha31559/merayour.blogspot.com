@@ -1,11 +1,11 @@
-(function () {
+ (function () {
   "use strict";
 
   if (window.__MERAYOUR_ULTIMATE_V92__) return;
   window.__MERAYOUR_ULTIMATE_V92__ = true;
 
   // ==========================================================
-  // MERAYOUR ADGUARD V9.2 - ULTIMATE HYBRID (HONEYPOT + CORE)
+  // MERAYOUR ADGUARD V9.2 - ULTIMATE SHADOW-BAIT & CORE EDITION
   // ==========================================================
 
   const CONFIG = {
@@ -60,38 +60,50 @@
     detachedContent: new Map(),
     savedPageStyles: null,
     lockInProgress: false,
-    baitElement: null
+    baitHost: null,
+    shadowBait: null
   };
 
   // ==========================================================
-  // 1. HONEYPOT BAIT TRAP (दुनिया का सबसे खतरनाक तरीका)
+  // 1. ADVANCED SHADOW DOM BAIT TRAP (नया ताकतवर पैच)
   // ==========================================================
-  function plantBait() {
-    if (document.getElementById("adsbygoogle-trap-box")) return;
-    const bait = document.createElement("div");
-    bait.id = "adsbygoogle-trap-box";
-    bait.className = "adsbygoogle pub_300x250 pub_300x250_m text-ad textAd banner-ad";
-    bait.style.cssText = "width: 1px !important; height: 1px !important; position: absolute !important; left: -9999px !important; top: -9999px !important; opacity: 0.01 !important; pointer-events: none !important;";
-    bait.innerHTML = "&nbsp;";
-    (document.body || document.documentElement).appendChild(bait);
-    state.baitElement = bait;
+  function plantShadowBait() {
+    if (document.getElementById("merayour-shadow-host")) return;
+    
+    try {
+      const host = document.createElement("div");
+      host.id = "merayour-shadow-host";
+      host.style.cssText = "position:absolute !important; left:-9999px !important; top:-9999px !important; width:1px !important; height:1px !important; opacity:0.01 !important; pointer-events:none !important;";
+      
+      const shadow = host.attachShadow({ mode: 'open' });
+      const fakeAd = document.createElement("div");
+      fakeAd.id = "google_ads_iframe_net_trap";
+      fakeAd.className = "adsbygoogle pub_300x250 text-ad";
+      fakeAd.style.cssText = "width:300px !important; height:250px !important; display:block !important;";
+      fakeAd.innerHTML = '<iframe src="about:blank" style="width:100%;height:100%;"></iframe>';
+      
+      shadow.appendChild(fakeAd);
+      (document.body || document.documentElement).appendChild(host);
+      
+      state.baitHost = host;
+      state.shadowBait = fakeAd;
+    } catch (_) {}
   }
 
-  function checkBaitTrap() {
-    if (!state.baitElement) return false;
+  function checkShadowBaitTrap() {
+    if (!state.baitHost || !state.shadowBait) return false;
     try {
-      const rect = state.baitElement.getBoundingClientRect();
-      const style = window.getComputedStyle(state.baitElement);
+      const hostRect = state.baitHost.getBoundingClientRect();
+      const style = window.getComputedStyle(state.baitHost);
 
       if (
         style.display === "none" ||
         style.visibility === "hidden" ||
         style.opacity === "0" ||
-        rect.width === 0 ||
-        rect.height === 0 ||
-        !state.baitElement.isConnected
+        hostRect.width === 0 ||
+        !state.baitHost.isConnected
       ) {
-        return true; // एड-ब्लॉकर रंगे हाथ पकड़ा गया!
+        return true; // एक्सटेंशन रंगे हाथ पकड़ा गया!
       }
     } catch (_) {}
     return false;
@@ -190,13 +202,13 @@
     let gaScore = 0;
     let adScore = 0;
 
-    if (checkBaitTrap()) {
+    if (checkShadowBaitTrap()) {
       state.baitTriggered = true;
-      gaScore = 100; // हनीपॉट ने पकड़ लिया तो सीधा मैक्सिमम स्कोर
+      gaScore = 100; // शैडो हनीपॉट ने पकड़ लिया तो सीधा मैक्सिमम स्कोर
     }
 
-    if (state.gaScriptFailed) gaScore = Math.max(gaScore, CONFIG.GA_SCRIPT_FAILURE);
-    if (state.adsenseScriptFailed) adScore = Math.max(adScore, CONFIG.ADSENSE_SCRIPT_FAILURE);
+    if (state.gaScriptFailed) gaScore = Math.max(gaScore, CONFIG.GA_SCRIPT_FAILURE || 50);
+    if (state.adsenseScriptFailed) adScore = Math.max(adScore, CONFIG.ADSENSE_SCRIPT_FAILURE || 50);
 
     const totalScore = Math.max(gaScore, adScore);
     return {
@@ -434,7 +446,7 @@
   function evaluate() {
     const evidence = calculateEvidence();
 
-    if (evidence.suspicios || state.baitTriggered) {
+    if (evidence.suspicious || state.baitTriggered) {
       state.healthySince = 0;
       if (!state.suspiciousSince) {
         state.suspiciousSince = Date.now();
@@ -458,7 +470,7 @@
   }
 
   function init() {
-    plantBait();
+    plantShadowBait();
     watchScripts();
     state.timer = window.setInterval(evaluate, CONFIG.CHECK_INTERVAL);
     evaluate();
