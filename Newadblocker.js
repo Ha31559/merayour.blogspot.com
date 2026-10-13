@@ -2,8 +2,9 @@
     "use strict";
 
     // ==========================================================
-    // MERAYOUR ADGUARD — V9.2 HEARTBEAT EDITION
-    // Separate Analytics + AdSense health monitoring
+    // MERAYOUR ADGUARD V10 — HEARTBEAT CORE
+    // Analytics + AdSense monitoring
+    // Failure confirmation + recovery + diagnostics
     // ==========================================================
 
     if (window.__MERAYOUR_ADGUARD_ACTIVE__) return;
@@ -13,23 +14,23 @@
         GA4_ID: "G-ML091DD9QZ",
         ADSENSE_ID: "ca-pub-1011806586686442",
 
-        INITIAL_GRACE: 100,
-        SYSTEM_GRACE: 100,
+        INITIAL_GRACE: 5000,
+        SYSTEM_GRACE: 10000,
 
-        CHECK_INTERVAL: 10,
-        CONFIRMATION_TIME: 400,
-        RECOVERY_CONFIRMATION_TIME: 500,
+        CHECK_INTERVAL: 800,
+        FAILURE_CONFIRMATION: 3000,
+        RECOVERY_CONFIRMATION: 5000,
 
         FAILURE_CONFIRMATIONS: 3,
 
-        OVERLAY_ID: "merayour-v92-lock",
-        STYLE_ID: "merayour-v92-style",
+        // false = any one confirmed service failure can trigger.
+        // true = require both services to fail.
+        REQUIRE_BOTH_SERVICES: false,
 
-        CONTENT_SELECTORS: [
-            ".post-body",
-            "article",
-            ".post"
-        ]
+        DIAGNOSTICS: true,
+
+        OVERLAY_ID: "merayour-v92-lock",
+        STYLE_ID: "merayour-v92-style"
     };
 
     const now = () => Date.now();
@@ -37,53 +38,74 @@
     const state = {
         startedAt: now(),
 
-        ga: {
-            scriptFound: false,
-            scriptLoaded: false,
-            scriptFailed: false,
-            activitySeen: false,
-            lastActivity: 0,
-            consecutiveFailures: 0,
-            healthySince: 0,
-            lastReason: ""
-        },
+        ga: createServiceState(),
+        ads: createServiceState(),
 
-        ads: {
-            scriptFound: false,
-            scriptLoaded: false,
-            scriptFailed: false,
-            slotsFound: false,
-            filled: false,
-            unfilled: false,
-            consecutiveFailures: 0,
-            healthySince: 0,
-            lastReason: ""
-        },
-
-        locked: false,
-        lockStartedAt: 0,
         suspiciousSince: 0,
         healthySince: 0,
 
-        observer: null,
+        locked: false,
+        overlay: null,
+
         timer: null,
-        overlay: null
+        observer: null,
+
+        lastDecision: ""
     };
 
+    function createServiceState() {
+        return {
+            scriptFound: false,
+            scriptLoaded: false,
+            scriptFailed: false,
+
+            activitySeen: false,
+            lastActivity: 0,
+
+            slotsFound: false,
+            filled: false,
+            unfilled: false,
+
+            failures: 0,
+            reason: "",
+
+            healthy: false,
+            healthySince: 0
+        };
+    }
+
     // ----------------------------------------------------------
-    // ENVIRONMENT CHECKS
+    // DIAGNOSTICS
+    // ----------------------------------------------------------
+
+    function log(message, data) {
+        if (!CONFIG.DIAGNOSTICS) return;
+
+        try {
+            console.info(
+                "[Merayour AdGuard]",
+                message,
+                data || ""
+            );
+        } catch (_) {}
+    }
+
+    // ----------------------------------------------------------
+    // BLOGGER PREVIEW BYPASS
     // ----------------------------------------------------------
 
     function isBloggerPreview() {
-        const host = (location.hostname || "").toLowerCase();
-        const href = location.href || "";
+        const host = location.hostname.toLowerCase();
 
         return (
-            host.includes("blogger.com") ||
+            host === "blogger.com" ||
+            host.endsWith(".blogger.com") ||
             /(?:^|[?&])preview=(?:true|1)(?:&|$)/i.test(
                 location.search
             ) ||
-            /blogger\.com\/blog\/post\/edit/i.test(href)
+            /\/blog\/post\/edit(?:\/|$)/i.test(
+                location.pathname
+            )
         );
     }
 
@@ -93,29 +115,34 @@
     }
 
     // ----------------------------------------------------------
-    // SERVICE SCRIPT IDENTIFICATION
+    // SCRIPT IDENTIFICATION
     // ----------------------------------------------------------
 
     function classifyScript(script) {
         if (!script || !script.src) return null;
 
-        const src = script.src.toLowerCase();
+        let url;
+
+        try {
+            url = new URL(script.src, location.href);
+        } catch (_) {
+            return null;
+        }
+
+        const host = url.hostname.toLowerCase();
+        const path = url.pathname.toLowerCase();
 
         if (
-            src.includes("googletagmanager.com/gtag/js") &&
-            src.includes(CONFIG.GA4_ID.toLowerCase())
+            host === "www.googletagmanager.com" &&
+            path === "/gtag/js" &&
+            url.searchParams.get("id") === CONFIG.GA4_ID
         ) {
             return "ga";
         }
 
         if (
-            src.includes("google-analytics.com/analytics.js")
-        ) {
-            return "ga";
-        }
-
-        if (
-            src.includes("pagead2.googlesyndication.com/pagead/js/adsbygoogle.js")
+            host === "pagead2.googlesyndication.com" &&
+            path.includes("/pagead/js/adsbygoogle.js")
         ) {
             return "ads";
         }
@@ -124,62 +151,57 @@
     }
 
     function inspectScripts() {
-        document.querySelectorAll("script[src]").forEach(function (script) {
-            const type = classifyScript(script);
+        document.querySelectorAll("script[src]").forEach(
+            function (script) {
+                const type = classifyScript(script);
 
-            if (!type) return;
+                if (!type) return;
 
-            const service = type === "ga" ? state.ga : state.ads;
+                const service =
+                    type === "ga" ? state.ga : state.ads;
 
-            service.scriptFound = true;
+                service.scriptFound = true;
 
-            if (script.dataset.merayourHealthListeners === "1") {
-                return;
+                if (
+                    script.dataset.merayourV10Listeners === "1"
+                ) {
+                    return;
+                }
+
+                script.dataset.merayourV10Listeners = "1";
+
+                script.addEventListener("load", function () {
+                    service.scriptLoaded = true;
+                    service.scriptFailed = false;
+                    service.reason = "";
+
+                    log(type + " script loaded");
+                });
+
+                script.addEventListener("error", function () {
+                    service.scriptFailed = true;
+                    service.scriptLoaded = false;
+                    service.reason = "explicit-script-error";
+
+                    log(type + " script error");
+                });
             }
-
-            script.dataset.merayourHealthListeners = "1";
-
-            script.addEventListener("load", function () {
-                service.scriptLoaded = true;
-                service.scriptFailed = false;
-                service.lastReason = "";
-                service.healthySince = now();
-            }, { once: true });
-
-            script.addEventListener("error", function () {
-                service.scriptFailed = true;
-                service.scriptLoaded = false;
-                service.lastReason = "script-error";
-            }, { once: true });
-
-            // A script already present may have finished loading
-            // before the detector attached its event listeners.
-            if (type === "ga" && typeof window.gtag === "function") {
-                service.scriptLoaded = true;
-            }
-
-            if (
-                type === "ads" &&
-                typeof window.adsbygoogle !== "undefined"
-            ) {
-                service.scriptLoaded = true;
-            }
-        });
+        );
     }
 
     // ----------------------------------------------------------
     // ANALYTICS HEARTBEAT
-    // Uses actual browser resource observations.
-    // Does not send fake requests.
     // ----------------------------------------------------------
 
-    function inspectAnalyticsActivity() {
-        if (!window.performance ||
-            typeof performance.getEntriesByType !== "function") {
+    function inspectAnalytics() {
+        if (
+            !window.performance ||
+            typeof performance.getEntriesByType !== "function"
+        ) {
             return;
         }
 
-        let entries = [];
+        let entries;
 
         try {
             entries = performance.getEntriesByType("resource");
@@ -188,26 +210,33 @@
         }
 
         for (const entry of entries) {
-            const url = (entry.name || "").toLowerCase();
+            let url;
 
-            const isGAActivity =
-                url.includes("google-analytics.com/g/collect") ||
-                url.includes("analytics.google.com/g/collect") ||
-                url.includes("region1.google-analytics.com/g/collect") ||
-                url.includes("google-analytics.com/collect");
+            try {
+                url = new URL(entry.name);
+            } catch (_) {
+                continue;
+            }
 
-            if (
-                isGAActivity &&
+            const host = url.hostname.toLowerCase();
+            const path = url.pathname.toLowerCase();
+
+            const isAnalyticsEndpoint =
                 (
-                    url.includes(CONFIG.GA4_ID.toLowerCase()) ||
-                    url.includes("google-analytics.com")
-                )
-            ) {
+                    host === "www.google-analytics.com" ||
+                    host === "google-analytics.com" ||
+                    host === "analytics.google.com" ||
+                    host === "region1.google-analytics.com"
+                ) &&
+                (
+                    path === "/g/collect" ||
+                    path === "/collect"
+                );
+
+            if (isAnalyticsEndpoint) {
                 state.ga.activitySeen = true;
                 state.ga.lastActivity = now();
-                state.ga.healthySince =
-                    state.ga.healthySince || now();
-                state.ga.lastReason = "";
+
                 break;
             }
         }
@@ -215,10 +244,9 @@
 
     // ----------------------------------------------------------
     // ADSENSE HEARTBEAT
-    // An empty slot alone is not proof of an ad blocker.
     // ----------------------------------------------------------
 
-    function inspectAdSlots() {
+    function inspectAdsense() {
         const selector =
             'ins.adsbygoogle[data-ad-client="' +
             CONFIG.ADSENSE_ID +
@@ -243,114 +271,94 @@
                 state.ads.unfilled = true;
             }
         });
-
-        // A filled ad is positive evidence that the ad system
-        // worked. "Unfilled" is not treated as an error.
-        if (state.ads.filled) {
-            state.ads.scriptFailed = false;
-            state.ads.lastReason = "";
-            state.ads.healthySince =
-                state.ads.healthySince || now();
-        }
     }
 
     // ----------------------------------------------------------
-    // HEALTH EVALUATION
+    // SERVICE HEALTH EVALUATION
     // ----------------------------------------------------------
-
-    function getServiceFailure(service, type) {
-        if (service.scriptFailed) {
-            return "explicit-script-error";
-        }
-
-        const elapsed = now() - state.startedAt;
-
-        if (elapsed < CONFIG.SYSTEM_GRACE) {
-            return "";
-        }
-
-        if (type === "ga") {
-            // Missing Analytics library is a failure signal.
-            if (
-                !service.scriptFound &&
-                typeof window.gtag !== "function"
-            ) {
-                return "analytics-library-missing";
-            }
-
-            // Do not call Analytics blocked merely because no
-            // collection request has appeared yet.
-            if (
-                service.scriptFound &&
-                !service.scriptLoaded &&
-                typeof window.gtag !== "function"
-            ) {
-                return "analytics-not-loaded";
-            }
-
-            return "";
-        }
-
-        // AdSense library/script checks.
-        if (
-            !service.scriptFound &&
-            typeof window.adsbygoogle === "undefined"
-        ) {
-            return "adsense-library-missing";
-        }
-
-        if (
-            service.scriptFound &&
-            !service.scriptLoaded &&
-            typeof window.adsbygoogle === "undefined"
-        ) {
-            return "adsense-not-loaded";
-        }
-
-        // IMPORTANT:
-        // No filled ad, an unfilled slot, or no ad slot does not
-        // independently count as a failure.
-        return "";
-    }
 
     function evaluateService(service, type) {
-        const reason = getServiceFailure(service, type);
+        const elapsed = now() - state.startedAt;
 
-        if (reason) {
-            service.lastReason = reason;
-            service.healthySince = 0;
-            service.consecutiveFailures++;
-            return false;
+        let failureReason = "";
+
+        if (service.scriptFailed) {
+            failureReason = "explicit-script-error";
+        } else if (elapsed >= CONFIG.SYSTEM_GRACE) {
+            if (type === "ga") {
+                if (
+                    !service.scriptFound &&
+                    typeof window.gtag !== "function"
+                ) {
+                    failureReason = "analytics-script-missing";
+                } else if (
+                    service.scriptFound &&
+                    !service.scriptLoaded &&
+                    typeof window.gtag !== "function"
+                ) {
+                    failureReason = "analytics-not-loaded";
+                }
+            } else {
+                if (
+                    !service.scriptFound &&
+                    typeof window.adsbygoogle === "undefined"
+                ) {
+                    failureReason = "adsense-script-missing";
+                } else if (
+                    service.scriptFound &&
+                    !service.scriptLoaded &&
+                    typeof window.adsbygoogle === "undefined"
+                ) {
+                    failureReason = "adsense-not-loaded";
+                }
+            }
         }
 
-        service.consecutiveFailures = 0;
-        service.lastReason = "";
-        service.healthySince = service.healthySince || now();
+        if (failureReason) {
+            service.failures++;
+            service.reason = failureReason;
+            service.healthy = false;
+            service.healthySince = 0;
+        } else {
+            service.failures = 0;
+            service.reason = "";
+            service.healthy = true;
 
-        return true;
+            if (!service.healthySince) {
+                service.healthySince = now();
+            }
+        }
+
+        return service.healthy;
     }
 
-    function getConfirmedFailures() {
-        const gaBad =
-            state.ga.consecutiveFailures >=
-            CONFIG.FAILURE_CONFIRMATIONS;
+    // ----------------------------------------------------------
+    // FAILURE POLICY
+    // ----------------------------------------------------------
 
-        const adsBad =
-            state.ads.consecutiveFailures >=
-            CONFIG.FAILURE_CONFIRMATIONS;
+    function getFailureStatus() {
+        const gaFailed =
+            state.ga.failures >= CONFIG.FAILURE_CONFIRMATIONS;
+
+        const adsFailed =
+            state.ads.failures >= CONFIG.FAILURE_CONFIRMATIONS;
+
+        const failed = CONFIG.REQUIRE_BOTH_SERVICES
+            ? gaFailed && adsFailed
+            : gaFailed || adsFailed;
 
         return {
-            gaBad: gaBad,
-            adsBad: adsBad,
-            anyBad: gaBad || adsBad
+            gaFailed,
+            adsFailed,
+            failed
         };
     }
 
     // ----------------------------------------------------------
-    // LOCK / RECOVERY UI
+    // POPUP STYLES
     // ----------------------------------------------------------
 
-    function createStyles() {
+    function addStyles() {
         if (document.getElementById(CONFIG.STYLE_ID)) return;
 
         const style = document.createElement("style");
@@ -364,7 +372,7 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                padding: 24px;
+                padding: 22px;
                 box-sizing: border-box;
                 background: rgba(5, 7, 15, .97);
                 color: #f4f6ff;
@@ -386,11 +394,9 @@
                 margin: 0 0 14px;
                 color: #ff526f;
                 font-size: 25px;
-                line-height: 1.3;
             }
 
             #${CONFIG.OVERLAY_ID} p {
-                margin: 0 0 20px;
                 color: #d4d9e7;
                 font-size: 16px;
                 line-height: 1.65;
@@ -408,30 +414,34 @@
             }
         `;
 
-        (document.head || document.documentElement).appendChild(style);
+        (document.head || document.documentElement)
+            .appendChild(style);
     }
+
+    // ----------------------------------------------------------
+    // LOCK CONTROLLER
+    // ----------------------------------------------------------
 
     function createLock() {
         if (state.locked || !document.body) return;
 
-        createStyles();
+        addStyles();
 
         const overlay = document.createElement("div");
         overlay.id = CONFIG.OVERLAY_ID;
 
         overlay.innerHTML = `
-            <div class="my-health-card" role="alertdialog"
-                 aria-modal="true"
-                 aria-labelledby="my-health-title">
-                <h2 id="my-health-title">
-                    Please Support Merayour
-                </h2>
+            <div class="my-health-card"
+                 role="alertdialog"
+                 aria-modal="true">
+                <h2>Support Merayour</h2>
+
                 <p>
-                    Our website relies on advertising to help keep
-                    its stories available. Please check whether your
-                    ad blocker is preventing our advertising scripts
-                    from working, then try again.
+                    Our advertising scripts may not be loading.
+                    Please check your ad blocker or browser
+                    content-blocking settings, then check again.
                 </p>
+
                 <button type="button" id="my-health-recheck">
                     Check Again
                 </button>
@@ -442,127 +452,112 @@
 
         overlay.querySelector("#my-health-recheck")
             .addEventListener("click", function () {
-                state.ga.consecutiveFailures = 0;
-                state.ads.consecutiveFailures = 0;
+                state.ga.failures = 0;
+                state.ads.failures = 0;
+
                 state.suspiciousSince = 0;
                 state.healthySince = 0;
 
                 inspectScripts();
-                inspectAnalyticsActivity();
-                inspectAdSlots();
+                inspectAnalytics();
+                inspectAdsense();
 
                 evaluate();
             });
 
         state.overlay = overlay;
         state.locked = true;
-        state.lockStartedAt = now();
+
+        log("Popup displayed", {
+            analytics: state.ga.reason,
+            adsense: state.ads.reason
+        });
     }
 
     function removeLock() {
         if (state.overlay) {
             state.overlay.remove();
-            state.overlay = null;
         }
 
-        const existing = document.getElementById(CONFIG.OVERLAY_ID);
+        const existing =
+            document.getElementById(CONFIG.OVERLAY_ID);
 
-        if (existing) {
-            existing.remove();
-        }
+        if (existing) existing.remove();
 
+        state.overlay = null;
         state.locked = false;
-        state.lockStartedAt = 0;
+
+        log("Popup removed after confirmed recovery");
     }
 
     // ----------------------------------------------------------
-    // HEARTBEAT ENGINE
+    // HEARTBEAT CONTROLLER
     // ----------------------------------------------------------
 
     function evaluate() {
         if (!document.body) return;
 
         inspectScripts();
-        inspectAnalyticsActivity();
-        inspectAdSlots();
+        inspectAnalytics();
+        inspectAdsense();
 
-        if (now() - state.startedAt < CONFIG.INITIAL_GRACE) {
+        const elapsed = now() - state.startedAt;
+
+        if (elapsed < CONFIG.INITIAL_GRACE) {
             return;
         }
 
-        const gaHealthy = evaluateService(state.ga, "ga");
-        const adsHealthy = evaluateService(state.ads, "ads");
+        evaluateService(state.ga, "ga");
+        evaluateService(state.ads, "ads");
 
-        const failures = getConfirmedFailures();
+        const result = getFailureStatus();
 
-        if (failures.anyBad) {
+        if (result.failed) {
             state.healthySince = 0;
-            state.suspiciousSince =
-                state.suspiciousSince || now();
 
-            const confirmedFor =
-                now() - state.suspiciousSince;
+            if (!state.suspiciousSince) {
+                state.suspiciousSince = now();
+            }
 
             if (
-                confirmedFor >= CONFIG.CONFIRMATION_TIME
+                now() - state.suspiciousSince >=
+                CONFIG.FAILURE_CONFIRMATION
             ) {
+                state.lastDecision = "confirmed-failure";
                 createLock();
             }
 
             return;
         }
 
-        // Recovery is based on the actual service checks.
-        // AdSense does not need to have a filled ad to be healthy.
-        if (gaHealthy && adsHealthy) {
-            state.suspiciousSince = 0;
+        state.suspiciousSince = 0;
+
+        if (state.ga.healthy && state.ads.healthy) {
             state.healthySince =
                 state.healthySince || now();
 
             if (
                 state.locked &&
                 now() - state.healthySince >=
-                    CONFIG.RECOVERY_CONFIRMATION_TIME
+                CONFIG.RECOVERY_CONFIRMATION
             ) {
                 removeLock();
             }
+        } else {
+            state.healthySince = 0;
         }
     }
 
     // ----------------------------------------------------------
-    // OBSERVERS
+    // DYNAMIC SCRIPT OBSERVER
     // ----------------------------------------------------------
 
-    function startObservers() {
-        if (!("MutationObserver" in window)) return;
+    function startObserver() {
+        if (!window.MutationObserver) return;
 
-        state.observer = new MutationObserver(function (mutations) {
-            let needsInspection = false;
-
-            for (const mutation of mutations) {
-                if (mutation.type !== "childList") continue;
-
-                for (const node of mutation.addedNodes) {
-                    if (node.nodeType !== 1) continue;
-
-                    if (
-                        node.tagName === "SCRIPT" ||
-                        node.querySelector("script[src]") ||
-                        node.matches("ins.adsbygoogle") ||
-                        node.querySelector("ins.adsbygoogle")
-                    ) {
-                        needsInspection = true;
-                        break;
-                    }
-                }
-
-                if (needsInspection) break;
-            }
-
-            if (needsInspection) {
-                inspectScripts();
-                inspectAdSlots();
-            }
+        state.observer = new MutationObserver(function () {
+            inspectScripts();
+            inspectAdsense();
         });
 
         state.observer.observe(document.documentElement, {
@@ -577,10 +572,10 @@
 
     function init() {
         inspectScripts();
-        inspectAnalyticsActivity();
-        inspectAdSlots();
+        inspectAnalytics();
+        inspectAdsense();
 
-        startObservers();
+        startObserver();
 
         state.timer = window.setInterval(
             evaluate,
@@ -588,6 +583,36 @@
         );
 
         evaluate();
+
+        // Optional inspection from browser DevTools:
+        // window.__MERAYOUR_ADGUARD_DIAGNOSTICS__()
+        window.__MERAYOUR_ADGUARD_DIAGNOSTICS__ = function () {
+            return {
+                locked: state.locked,
+                elapsed: now() - state.startedAt,
+                analytics: {
+                    scriptFound: state.ga.scriptFound,
+                    scriptLoaded: state.ga.scriptLoaded,
+                    scriptFailed: state.ga.scriptFailed,
+                    activitySeen: state.ga.activitySeen,
+                    failures: state.ga.failures,
+                    reason: state.ga.reason
+                },
+                adsense: {
+                    scriptFound: state.ads.scriptFound,
+                    scriptLoaded: state.ads.scriptLoaded,
+                    scriptFailed: state.ads.scriptFailed,
+                    slotsFound: state.ads.slotsFound,
+                    filled: state.ads.filled,
+                    unfilled: state.ads.unfilled,
+                    failures: state.ads.failures,
+                    reason: state.ads.reason
+                },
+                lastDecision: state.lastDecision
+            };
+        };
+
+        log("V10 Heartbeat Core initialized");
     }
 
     if (document.readyState === "loading") {
