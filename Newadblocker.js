@@ -1,32 +1,27 @@
 (function () {
   "use strict";
 
-  if (window.__MERAYOUR_ADGUARD_V92__) return;
-  window.__MERAYOUR_ADGUARD_V92__ = true;
+  if (window.__MERAYOUR_ULTIMATE_V92__) return;
+  window.__MERAYOUR_ULTIMATE_V92__ = true;
 
   // ==========================================================
-  // MERAYOUR ADGUARD V9.2 - ULTIMATE STEALTH & FORCE-INJECTION
+  // MERAYOUR ADGUARD V9.2 - ULTIMATE HYBRID (HONEYPOT + CORE)
   // ==========================================================
 
   const CONFIG = {
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    INITIAL_GRACE: 000,    
-    SYSTEM_GRACE: 00,     
-    CONFIRMATION_TIME: 00, 
-    RECOVERY_CONFIRMATION_TIME: 00,
-    CHECK_INTERVAL: 800,
+    INITIAL_GRACE: 30000,    // 30 सेकंड शुरुआती छूट
+    SYSTEM_GRACE: 60000,     // 60 सेकंड सिस्टम ग्रेस पीरियड
+    CONFIRMATION_TIME: 2000, // 2 सेकंड की पुष्टि का समय
+    RECOVERY_CONFIRMATION_TIME: 5000,
+    CHECK_INTERVAL: 600,     // तेज रफ्तार जांच
 
-    GA_SCRIPT_FAILURE: 00,
-    GA_ACTIVITY_MISSING: 00,
-    ADSENSE_SCRIPT_FAILURE: 00,
-    ADSENSE_RENDER_MISSING: 0, 
-    
-    DETECTION_THRESHOLD: 8, 
+    DETECTION_THRESHOLD: 50, 
 
-    OVERLAY_ID: "m-lock-v92-x",
-    STYLE_ID: "m-style-v92-x",
+    OVERLAY_ID: "merayour-v92-lock",
+    STYLE_ID: "merayour-v92-style",
 
     CONTENT_SELECTORS: [
       ".post-body",
@@ -51,8 +46,7 @@
     adFilled: false,
     adUnfilled: false,
 
-    gaFailureScore: 0,
-    adsenseFailureScore: 0,
+    baitTriggered: false, // हनीपॉट ट्रैप का स्टेट
 
     suspiciousSince: 0,
     healthySince: 0,
@@ -65,9 +59,47 @@
 
     detachedContent: new Map(),
     savedPageStyles: null,
-    lockInProgress: false
+    lockInProgress: false,
+    baitElement: null
   };
 
+  // ==========================================================
+  // 1. HONEYPOT BAIT TRAP (दुनिया का सबसे खतरनाक तरीका)
+  // ==========================================================
+  function plantBait() {
+    if (document.getElementById("adsbygoogle-trap-box")) return;
+    const bait = document.createElement("div");
+    bait.id = "adsbygoogle-trap-box";
+    bait.className = "adsbygoogle pub_300x250 pub_300x250_m text-ad textAd banner-ad";
+    bait.style.cssText = "width: 1px !important; height: 1px !important; position: absolute !important; left: -9999px !important; top: -9999px !important; opacity: 0.01 !important; pointer-events: none !important;";
+    bait.innerHTML = "&nbsp;";
+    (document.body || document.documentElement).appendChild(bait);
+    state.baitElement = bait;
+  }
+
+  function checkBaitTrap() {
+    if (!state.baitElement) return false;
+    try {
+      const rect = state.baitElement.getBoundingClientRect();
+      const style = window.getComputedStyle(state.baitElement);
+
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.opacity === "0" ||
+        rect.width === 0 ||
+        rect.height === 0 ||
+        !state.baitElement.isConnected
+      ) {
+        return true; // एड-ब्लॉकर रंगे हाथ पकड़ा गया!
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  // ==========================================================
+  // 2. ENVIRONMENT & CORE SCRIPT MONITORING
+  // ==========================================================
   function isBloggerPreview() {
     const host = (location.hostname || "").toLowerCase();
     const search = (location.search || "").toLowerCase();
@@ -99,11 +131,8 @@
     if (script.dataset.merayourWatched === "1") return;
     script.dataset.merayourWatched = "1";
 
-    if (type === "GA4") {
-      state.gaScriptFound = true;
-    } else {
-      state.adsenseScriptFound = true;
-    }
+    if (type === "GA4") state.gaScriptFound = true;
+    else state.adsenseScriptFound = true;
 
     script.addEventListener("load", function () {
       if (type === "GA4") {
@@ -116,11 +145,8 @@
     }, { once: true });
 
     script.addEventListener("error", function () {
-      if (type === "GA4") {
-        state.gaScriptFailed = true;
-      } else {
-        state.adsenseScriptFailed = true;
-      }
+      if (type === "GA4") state.gaScriptFailed = true;
+      else state.adsenseScriptFailed = true;
     }, { once: true });
   }
 
@@ -145,9 +171,7 @@
       records.forEach(function (record) {
         record.addedNodes.forEach(function (node) {
           if (node.nodeType !== 1) return;
-          if (node.tagName === "SCRIPT") {
-            attachScriptListeners(node);
-          }
+          if (node.tagName === "SCRIPT") attachScriptListeners(node);
           if (node.querySelectorAll) {
             node.querySelectorAll("script[src]").forEach(attachScriptListeners);
           }
@@ -155,103 +179,29 @@
       });
     });
 
-    state.observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true
-    });
+    state.observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
-  function isGAResource(url) {
-    if (!url) return false;
-    const value = url.toLowerCase();
-    return (
-      value.includes("google-analytics.com/g/collect") ||
-      value.includes("analytics.google.com/g/collect") ||
-      value.includes("region1.google-analytics.com/g/collect") ||
-      value.includes("google-analytics.com/collect")
-    );
-  }
-
-  function inspectGAResources() {
-    try {
-      performance.getEntriesByType("resource").forEach(function (entry) {
-        if (isGAResource(entry.name)) {
-          state.gaActivitySeen = true;
-        }
-      });
-    } catch (_) {}
-  }
-
-  function watchGAResources() {
-    if (!("PerformanceObserver" in window)) return;
-    try {
-      state.gaObserver = new PerformanceObserver(function (list) {
-        list.getEntries().forEach(function (entry) {
-          if (isGAResource(entry.name)) {
-            state.gaActivitySeen = true;
-          }
-        });
-      });
-      state.gaObserver.observe({ type: "resource", buffered: true });
-    } catch (_) {}
-  }
-
-  function inspectAdSlots() {
-    const selector = 'ins.adsbygoogle[data-ad-client="' + CONFIG.ADSENSE_ID + '"]';
-    const slots = document.querySelectorAll(selector);
-    state.adSlotsFound = slots.length > 0;
-
-    let filled = false;
-    let unfilled = false;
-
-    slots.forEach(function (slot) {
-      const status = (slot.getAttribute("data-ad-status") || "").toLowerCase();
-      if (status === "filled") filled = true;
-      if (status === "unfilled") unfilled = true;
-
-      const iframe = slot.querySelector("iframe");
-      if (iframe && status === "filled") {
-        const rect = iframe.getBoundingClientRect();
-        const style = getComputedStyle(iframe);
-        if (rect.width >= 10 && rect.height >= 10 && style.display !== "none" && style.visibility !== "hidden") {
-          filled = true;
-        }
-      }
-    });
-
-    state.adFilled = filled;
-    state.adUnfilled = unfilled;
-  }
-
+  // ==========================================================
+  // 3. CORE EVIDENCE & CONTENT DETACHMENT ENGINE
+  // ==========================================================
   function calculateEvidence() {
     const elapsed = Date.now() - startedAt;
     let gaScore = 0;
     let adScore = 0;
 
-    if (state.gaScriptFailed) gaScore += 50;
-
-    if (elapsed >= CONFIG.SYSTEM_GRACE) {
-      if (typeof window.gtag === "undefined") {
-        gaScore += 50;
-      } else if (state.gaScriptFound && !state.gaActivitySeen) {
-        gaScore += 40;
-      }
+    if (checkBaitTrap()) {
+      state.baitTriggered = true;
+      gaScore = 100; // हनीपॉट ने पकड़ लिया तो सीधा मैक्सिमम स्कोर
     }
 
-    if (state.adsenseScriptFailed) adScore += 50;
-    if (elapsed >= CONFIG.SYSTEM_GRACE && typeof window.adsbygoogle === "undefined") {
-      adScore += 50;
-    }
-
-    state.gaFailureScore = gaScore;
-    state.adsenseFailureScore = adScore;
+    if (state.gaScriptFailed) gaScore = Math.max(gaScore, CONFIG.GA_SCRIPT_FAILURE);
+    if (state.adsenseScriptFailed) adScore = Math.max(adScore, CONFIG.ADSENSE_SCRIPT_FAILURE);
 
     const totalScore = Math.max(gaScore, adScore);
     return {
-      ga: gaScore,
-      adsense: adScore,
       total: totalScore,
-      suspicious: totalScore >= CONFIG.DETECTION_THRESHOLD && elapsed >= CONFIG.SYSTEM_GRACE
+      suspicious: totalScore >= CONFIG.DETECTION_THRESHOLD && elapsed >= CONFIG.INITIAL_GRACE
     };
   }
 
@@ -283,16 +233,6 @@
     return [];
   }
 
-  function savePageStyles() {
-    if (state.savedPageStyles) return;
-    state.savedPageStyles = {
-      htmlOverflow: document.documentElement.style.getPropertyValue("overflow"),
-      htmlOverflowPriority: document.documentElement.style.getPropertyPriority("overflow"),
-      bodyOverflow: document.body ? document.body.style.getPropertyValue("overflow") : "",
-      bodyOverflowPriority: document.body ? document.body.style.getPropertyPriority("overflow") : ""
-    };
-  }
-
   function detachContent() {
     if (state.lockInProgress) return;
     state.lockInProgress = true;
@@ -301,7 +241,7 @@
         if (!el.parentNode || !el.isConnected) return;
         const parent = el.parentNode;
         const nextSibling = el.nextSibling;
-        const placeholder = document.createComment("Locked by security engine");
+        const placeholder = document.createComment("Merayour content temporarily locked");
         const record = { placeholder: placeholder, parent: parent, nextSibling: nextSibling };
         try {
           parent.replaceChild(placeholder, el);
@@ -309,7 +249,13 @@
         } catch (_) {}
       });
 
-      savePageStyles();
+      if (!state.savedPageStyles) {
+        state.savedPageStyles = {
+          htmlOverflow: document.documentElement.style.getPropertyValue("overflow"),
+          bodyOverflow: document.body ? document.body.style.getPropertyValue("overflow") : ""
+        };
+      }
+
       document.documentElement.style.setProperty("overflow", "hidden", "important");
       if (document.body) {
         document.body.style.setProperty("overflow", "hidden", "important");
@@ -317,28 +263,6 @@
     } finally {
       state.lockInProgress = false;
     }
-  }
-
-  function restorePageStyles() {
-    const saved = state.savedPageStyles;
-    if (!saved) return;
-    const html = document.documentElement;
-    const body = document.body;
-
-    if (saved.htmlOverflow) {
-      html.style.setProperty("overflow", saved.htmlOverflow, saved.htmlOverflowPriority);
-    } else {
-      html.style.removeProperty("overflow");
-    }
-
-    if (body) {
-      if (saved.bodyOverflow) {
-        body.style.setProperty("overflow", saved.bodyOverflow, saved.bodyOverflowPriority);
-      } else {
-        body.style.removeProperty("overflow");
-      }
-    }
-    state.savedPageStyles = null;
   }
 
   function restoreContent() {
@@ -355,9 +279,25 @@
       } catch (_) {}
     });
     state.detachedContent.clear();
-    restorePageStyles();
+
+    if (state.savedPageStyles) {
+      if (state.savedPageStyles.htmlOverflow) {
+        document.documentElement.style.setProperty("overflow", state.savedPageStyles.htmlOverflow);
+      } else {
+        document.documentElement.style.removeProperty("overflow");
+      }
+      if (document.body && state.savedPageStyles.bodyOverflow) {
+        document.body.style.setProperty("overflow", state.savedPageStyles.bodyOverflow);
+      } else if (document.body) {
+        document.body.style.removeProperty("overflow");
+      }
+      state.savedPageStyles = null;
+    }
   }
 
+  // ==========================================================
+  // 4. OVERLAY STYLES & FORCE LOCK
+  // ==========================================================
   function installStyles() {
     if (document.getElementById(CONFIG.STYLE_ID)) return;
     const style = document.createElement("style");
@@ -375,40 +315,41 @@
         justify-content: center !important;
         padding: 20px !important;
         box-sizing: border-box !important;
-        background: rgba(2, 4, 8, 0.998) !important;
+        background: rgba(5, 7, 12, 0.995) !important;
         color: #fff !important;
         font-family: Arial, sans-serif !important;
         overflow: hidden !important;
+        backdrop-filter: blur(8px) !important;
       }
-      #${CONFIG.OVERLAY_ID} .m-card-box {
+      #${CONFIG.OVERLAY_ID} .ag-v92-card {
         width: 100% !important;
         max-width: 450px !important;
         padding: 30px 24px !important;
         box-sizing: border-box !important;
         text-align: center !important;
-        background: #111520 !important;
-        border: 2px solid #ff334b !important;
+        background: #151923 !important;
+        border: 2px solid #ff4757 !important;
         border-radius: 14px !important;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95) !important;
+        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.9) !important;
       }
       #${CONFIG.OVERLAY_ID} h2 {
         margin: 0 0 15px !important;
-        color: #ff4757 !important;
+        color: #ff626c !important;
         font-size: 24px !important;
         font-weight: 700 !important;
       }
       #${CONFIG.OVERLAY_ID} p {
-        color: #cfd3dc !important;
+        color: #d2d5df !important;
         font-size: 15px !important;
         line-height: 1.6 !important;
-        margin-bottom: 22px !important;
+        margin-bottom: 20px !important;
       }
       #${CONFIG.OVERLAY_ID} button {
         width: 100% !important;
         padding: 14px 20px !important;
         border: 0 !important;
         border-radius: 8px !important;
-        background: #ff334b !important;
+        background: #ff4757 !important;
         color: #fff !important;
         font-weight: bold !important;
         font-size: 16px !important;
@@ -426,25 +367,19 @@
     if (!overlay) {
       overlay = document.createElement("div");
       overlay.id = CONFIG.OVERLAY_ID;
-      overlay.setAttribute("style", "position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 2147483647 !important; display: flex !important; align-items: center !important; justify-content: center !important; background: rgba(2, 4, 8, 0.998) !important;");
 
       const card = document.createElement("div");
-      card.className = "m-card-box";
-      card.setAttribute("style", "width: 100% !important; max-width: 450px !important; padding: 30px 24px !important; background: #111520 !important; border: 2px solid #ff334b !important; border-radius: 14px !important; text-align: center !important; color: #fff !important; box-shadow: 0 20px 60px rgba(0,0,0,0.95) !important;");
+      card.className = "ag-v92-card";
 
       const heading = document.createElement("h2");
-      heading.textContent = "Ad / Script Blocker Detected!";
-      heading.setAttribute("style", "color: #ff4757 !important; font-size: 24px !important; margin-bottom: 15px !important; font-weight: 700 !important;");
+      heading.textContent = "Ad Blocker Detected!";
 
       const message = document.createElement("p");
-      message.textContent = "This website requires ads and analytics scripts to run properly. Please disable your blocker or filter lists, then reload the page.";
-      message.setAttribute("style", "color: #cfd3dc !important; font-size: 15px !important; line-height: 1.6 !important; margin-bottom: 22px !important;");
+      message.textContent = "Merayour is supported by advertising and analytics. Please disable your ad blocker or filter lists to continue reading.";
 
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = "I've Disabled It — Reload Page";
-      button.setAttribute("style", "width: 100% !important; padding: 14px 20px !important; background: #ff334b !important; color: #fff !important; font-weight: bold !important; border: none !important; border-radius: 8px !important; cursor: pointer !important;");
-
+      button.textContent = "I've Allowed Ads — Reload";
       button.addEventListener("click", function () {
         location.reload();
       });
@@ -455,12 +390,8 @@
       overlay.appendChild(card);
     }
 
-    // अगर कोई फिल्टर इसे छुपाने की कोशिश करे, तो यह कोड इसे तुरंत वापस ज़बरदस्ती दिखा देगा
-    if (!overlay.isConnected || overlay.style.display === "none" || getComputedStyle(overlay).visibility === "hidden") {
+    if (!overlay.isConnected || getComputedStyle(overlay).display === "none") {
       document.body.appendChild(overlay);
-      overlay.style.setProperty("display", "flex", "important");
-      overlay.style.setProperty("visibility", "visible", "important");
-      overlay.style.setProperty("opacity", "1", "important");
     }
 
     state.locked = true;
@@ -470,10 +401,8 @@
       state.lockObserver = new MutationObserver(function () {
         if (!state.locked) return;
         let currentOverlay = document.getElementById(CONFIG.OVERLAY_ID);
-        if (!currentOverlay || !currentOverlay.isConnected || getComputedStyle(currentOverlay).display === "none") {
-          if (document.body) {
-            document.body.appendChild(overlay);
-          }
+        if (!currentOverlay || !currentOverlay.isConnected) {
+          if (document.body) document.body.appendChild(overlay);
         }
         detachContent();
       });
@@ -499,19 +428,18 @@
     state.healthySince = 0;
   }
 
+  // ==========================================================
+  // 5. MAIN EVALUATION LOOP
+  // ==========================================================
   function evaluate() {
-    inspectGAResources();
-    inspectAdSlots();
-    const elapsed = Date.now() - startedAt;
-
-    if (elapsed < CONFIG.INITIAL_GRACE) return;
-
     const evidence = calculateEvidence();
-    if (evidence.suspicious) {
+
+    if (evidence.suspicios || state.baitTriggered) {
       state.healthySince = 0;
       if (!state.suspiciousSince) {
         state.suspiciousSince = Date.now();
       }
+
       if (Date.now() - state.suspiciousSince >= CONFIG.CONFIRMATION_TIME) {
         createLock();
       }
@@ -519,7 +447,7 @@
     }
 
     state.suspiciousSince = 0;
-    if (state.locked) {
+    if (state.locked && !state.baitTriggered) {
       if (!state.healthySince) {
         state.healthySince = Date.now();
       }
@@ -530,11 +458,8 @@
   }
 
   function init() {
+    plantBait();
     watchScripts();
-    watchGAResources();
-    inspectGAResources();
-    inspectAdSlots();
-
     state.timer = window.setInterval(evaluate, CONFIG.CHECK_INTERVAL);
     evaluate();
   }
