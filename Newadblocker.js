@@ -16,7 +16,7 @@
     SYSTEM_GRACE: 0, // 0 सेकंड सिस्टम ग्रेस पीरियड
     CONFIRMATION_TIME: 0, //  सेकंड पुष्टि का समय
     RECOVERY_CONFIRMATION_TIME: 0,
-    CHECK_INTERVAL: 50, // और तेज रफ्तार जांच
+    CHECK_INTERVAL: 0, // और तेज रफ्तार जांच
 
     DETECTION_THRESHOLD: 40, // थोड़ा और सख्त ताकि तुरंत पकड़ में आए
 
