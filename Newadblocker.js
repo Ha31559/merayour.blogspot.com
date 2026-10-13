@@ -1,24 +1,24 @@
 (function () {
   "use strict";
 
-  if (window.__MERAYOUR_ULTIMATE_V92__) return;
-  window.__MERAYOUR_ULTIMATE_V92__ = true;
+  if (window.__MERAYOUR_EXTREME_V92__) return;
+  window.__MERAYOUR_EXTREME_V92__ = true;
 
   // ==========================================================
-  // MERAYOUR ADGUARD V9.2 - EDGE, OPERA & FIREFOX TARGETED EDITION
+  // MERAYOUR ADGUARD V9.2 - EXTREME MULTI-VECTOR EDGE & OPERA BYPASS
   // ==========================================================
 
   const CONFIG = {
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    INITIAL_GRACE: 20000,    // 20 सेकंड शुरुआती छूट
-    SYSTEM_GRACE: 45000,     // 45 सेकंड सिस्टम ग्रेस पीरियड
-    CONFIRMATION_TIME: 1500, // 1.5 सेकंड पुष्टि का समय
+    INITIAL_GRACE: 15000,    // 15 सेकंड शुरुआती छूट (और तेज)
+    SYSTEM_GRACE: 30000,     // 30 सेकंड सिस्टम ग्रेस पीरियड
+    CONFIRMATION_TIME: 1000, // 1 सेकंड पुष्टि का समय
     RECOVERY_CONFIRMATION_TIME: 5000,
-    CHECK_INTERVAL: 500,     // और तेज रफ्तार जांच
+    CHECK_INTERVAL: 400,     // एक्सट्रीम स्पीड जांच
 
-    DETECTION_THRESHOLD: 40, // थोड़ा और सख्त ताकि तुरंत पकड़ में आए
+    DETECTION_THRESHOLD: 30, // और ज्यादा सेंसिटिव
 
     OVERLAY_ID: "merayour-v92-lock",
     STYLE_ID: "merayour-v92-style",
@@ -47,7 +47,8 @@
     adUnfilled: false,
 
     baitTriggered: false,
-    networkBlocked: false, // नया पैच: नेटवर्क साइलेंट ब्लॉकिंग ट्रैक करने के लिए
+    networkBlocked: false,
+    extremeTamperDetected: false, // नया एक्सट्रीम पैच स्टेट
 
     suspiciousSince: 0,
     healthySince: 0,
@@ -61,68 +62,74 @@
     detachedContent: new Map(),
     savedPageStyles: null,
     lockInProgress: false,
-    baitHost: null,
-    shadowBait: null
+    baitHosts: [],
+    shadowBaits: []
   };
 
   // ==========================================================
-  // 1. ADVANCED SHADOW DOM BAIT TRAP
+  // 1. EXTREME MULTI-LAYERED SHADOW DOM BAITS (Edge और Opera के लिए)
   // ==========================================================
-  function plantShadowBait() {
-    if (document.getElementById("merayour-shadow-host")) return;
+  function plantExtremeBaits() {
+    if (state.baitHosts.length > 0) return;
+
+    const baitIDs = ["google_ads_iframe_net_trap_1", "aswift_0_box", "pub_300x250_deep_trap"];
     
-    try {
-      const host = document.createElement("div");
-      host.id = "merayour-shadow-host";
-      host.style.cssText = "position:absolute !important; left:-9999px !important; top:-9999px !important; width:1px !important; height:1px !important; opacity:0.01 !important; pointer-events:none !important;";
-      
-      const shadow = host.attachShadow({ mode: 'open' });
-      const fakeAd = document.createElement("div");
-      fakeAd.id = "google_ads_iframe_net_trap";
-      fakeAd.className = "adsbygoogle pub_300x250 text-ad";
-      fakeAd.style.cssText = "width:300px !important; height:250px !important; display:block !important;";
-      fakeAd.innerHTML = '<iframe src="about:blank" style="width:100%;height:100%;"></iframe>';
-      
-      shadow.appendChild(fakeAd);
-      (document.body || document.documentElement).appendChild(host);
-      
-      state.baitHost = host;
-      state.shadowBait = fakeAd;
-    } catch (_) {}
+    baitIDs.forEach((id, index) => {
+      try {
+        const host = document.createElement("div");
+        host.id = "merayour-shadow-host-" + index;
+        host.style.cssText = "position:absolute !important; left:-9999px !important; top:-9999px !important; width:1px !important; height:1px !important; opacity:0.01 !important; pointer-events:none !important;";
+        
+        const shadow = host.attachShadow({ mode: 'open' });
+        const fakeAd = document.createElement("div");
+        fakeAd.id = id;
+        fakeAd.className = "adsbygoogle pub_300x250 text-ad banner-ad";
+        fakeAd.style.cssText = "width:300px !important; height:250px !important; display:block !important;";
+        fakeAd.innerHTML = '<iframe src="about:blank" style="width:100%;height:100%;"></iframe>';
+        
+        shadow.appendChild(fakeAd);
+        (document.body || document.documentElement).appendChild(host);
+        
+        state.baitHosts.push(host);
+        state.shadowBaits.push(fakeAd);
+      } catch (_) {}
+    });
   }
 
-  function checkShadowBaitTrap() {
-    if (!state.baitHost || !state.shadowBait) return false;
-    try {
-      const hostRect = state.baitHost.getBoundingClientRect();
-      const style = window.getComputedStyle(state.baitHost);
+  function checkExtremeBaits() {
+    if (state.baitHosts.length === 0) return false;
+    
+    for (let i = 0; i < state.baitHosts.length; i++) {
+      try {
+        const host = state.baitHosts[i];
+        const hostRect = host.getBoundingClientRect();
+        const style = window.getConfirmationStyle ? window.getConfirmationStyle(host) : window.getComputedStyle(host);
 
-      if (
-        style.display === "none" ||
-        style.visibility === "hidden" ||
-        style.opacity === "0" ||
-        hostRect.width === 0 ||
-        !state.baitHost.isConnected
-      ) {
-        return true; 
-      }
-    } catch (_) {}
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          style.opacity === "0" ||
+          hostRect.width === 0 ||
+          !host.isConnected
+        ) {
+          return true; // Edge या Opera का कोई एक्सटेंशन रंगे हाथ पकड़ा गया!
+        }
+      } catch (_) {}
+    }
     return false;
   }
 
   // ==========================================================
-  // 2. EDGE, OPERA & FIREFOX TARGETED NETWORK & API SNIFFER (NEW PATCH)
-  // ये ब्राउज़र और एक्सटेंशन साइलेंटली रिक्वेस्ट ब्लॉक करते हैं, इन्हें यहाँ पकड़ेंगे
+  // 2. EXTREME PROTOTYPE & NATIVE HOOK INTERCEPTION (Edge/Opera Target)
   // ==========================================================
-  function watchNetworkBlocks() {
+  function watchExtremeTampering() {
     try {
-      // Fetch API को हुक करना ताकि अगर कोई एक्सटेंशन गूगल या एनालिटिक्स की कॉल रोके तो पता चले
+      // अगर कोई एक्सटेंशन window.fetch या XMLHttpRequest को साइलेंटली ब्लॉक या क्रैश करे
       const originalFetch = window.fetch;
       if (originalFetch) {
         window.fetch = function (...args) {
           const url = (args[0] || "").toString().toLowerCase();
-          if (url.includes("google-analytics.com") || url.includes("googlesyndication.com") || url.includes("googletagmanager.com")) {
-            // अगर रिक्वेस्ट करने पर तुरंत फेम या ब्लॉक का रिस्पॉन्स आए या कैंसल हो
+          if (url.includes("google") || url.includes("analytics") || url.includes("googlesyndication")) {
             return originalFetch.apply(this, args).catch(err => {
               state.networkBlocked = true;
               throw err;
@@ -133,10 +140,16 @@
       }
     } catch (_) {}
 
-    // ग्लोबल एडसेंस और विज्ञापन ऑब्जेक्ट्स की ताक-झांक (Edge/Firefox एक्सटेंशन इन्हें मॉडिफाई कर देते हैं)
+    // DOM API Tamper Check: यदि कोई एड-ब्लॉकर हमारे बनाए एलिमेंट्स के साथ छेड़छाड़ करता है
     try {
-      if (window.adsbygoogle && typeof window.adsbygoogle.loaded === "undefined" && navigator.userAgent.indexOf("Firefox") !== -1) {
-        state.networkBlocked = true;
+      const nativeRemove = Element.prototype.remove;
+      if (nativeRemove) {
+        Element.prototype.remove = function() {
+          if (this.id && (this.id.includes("trap") || this.id.includes("merayour"))) {
+            state.extremeTamperDetected = true;
+          }
+          return nativeRemove.apply(this, arguments);
+        };
       }
     } catch (_) {}
   }
@@ -227,15 +240,15 @@
   }
 
   // ==========================================================
-  // 4. CORE EVIDENCE & CONTENT DETACHMENT ENGINE
+  // 4. CORE EVIDENCE & CONTENT DETACHMENT ENGINE (पुराना लॉजिक सुरक्षित)
   // ==========================================================
   function calculateEvidence() {
     const elapsed = Date.now() - startedAt;
     let gaScore = 0;
     let adScore = 0;
 
-    // शैडो हनीपॉट या नेटवर्क साइलेंट ब्लॉकिंग (Edge/Firefox/Opera के लिए) पकड़े जाने पर
-    if (checkShadowBaitTrap() || state.networkBlocked) {
+    // अगर एक्सट्रीम हनीपॉट, नेटवर्क ब्लॉक या टैम्परिंग पकड़ी जाए
+    if (checkExtremeBaits() || state.networkBlocked || state.extremeTamperDetected) {
       state.baitTriggered = true;
       gaScore = 100; 
     }
@@ -341,7 +354,7 @@
   }
 
   // ==========================================================
-  // 5. OVERLAY STYLES & FORCE LOCK
+  // 5. OVERLAY STYLES & FORCE LOCK (पुराना लॉजिक सुरक्षित)
   // ==========================================================
   function installStyles() {
     if (document.getElementById(CONFIG.STYLE_ID)) return;
@@ -503,8 +516,8 @@
   }
 
   function init() {
-    plantShadowBait();
-    watchNetworkBlocks(); // नया पैच एक्टिव किया गया
+    plantExtremeBaits();
+    watchExtremeTampering();
     watchScripts();
     state.timer = window.setInterval(evaluate, CONFIG.CHECK_INTERVAL);
     evaluate();
@@ -517,3 +530,4 @@
   }
 
 })();
+
