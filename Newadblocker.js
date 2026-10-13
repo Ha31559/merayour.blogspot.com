@@ -5,26 +5,24 @@
   window.__MERAYOUR_ADGUARD_V92__ = true;
 
   // ==========================================================
-  // MERAYOUR ADGUARD V9.2 - SMART PATCHD EDITION (FALSE POSITIVE FIX)
+  // MERAYOUR ADGUARD V9.2 - ULTIMATE FORCE LOCK EDITION
   // ==========================================================
 
   const CONFIG = {
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    // समय को बढ़ा दिया ताकि नॉर्मल ब्राउज़र और स्लो नेटवर्क को पूरा मौका मिले
     INITIAL_GRACE: 35000,    // 35 सेकंड शुरुआती छूट
     SYSTEM_GRACE: 90000,     // 90 सेकंड का सिस्टम ग्रेस पीरियड
-    CONFIRMATION_TIME: 6000, // 6 सेकंड तक लगातार शक होने पर ही लॉक लगेगा
+    CONFIRMATION_TIME: 6000, // 6 सेकंड तक लगातार शक होने पर लॉक लगेगा
     RECOVERY_CONFIRMATION_TIME: 5000,
     CHECK_INTERVAL: 1000,
 
     GA_SCRIPT_FAILURE: 50,
     GA_ACTIVITY_MISSING: 40,
     ADSENSE_SCRIPT_FAILURE: 50,
-    ADSENSE_RENDER_MISSING: 0, // Unfilled ad के झंझट को खत्म किया ताकि फॉल्स लॉक न हो
+    ADSENSE_RENDER_MISSING: 0, 
     
-    // थ्रेशोल्ड 90 किया है, यानी जब तक पुख्ता सबूत न मिले, नॉर्मल यूजर सुरक्षित रहेगा
     DETECTION_THRESHOLD: 90, 
 
     OVERLAY_ID: "merayour-v92-lock",
@@ -307,7 +305,7 @@
   }
 
   // ==========================================================
-  // EVIDENCE ENGINE (SMART TUNED FOR 99% FALSE POSITIVE REMOVAL)
+  // EVIDENCE ENGINE
   // ==========================================================
 
   function calculateEvidence() {
@@ -550,7 +548,7 @@
   }
 
   // ==========================================================
-  // OVERLAY STYLES
+  // OVERLAY STYLES (UPDATED FOR FULL FORCE DISPLAY & OVERRIDE)
   // ==========================================================
 
   function installStyles() {
@@ -564,56 +562,60 @@
     style.textContent = `
       #${CONFIG.OVERLAY_ID} {
         position: fixed !important;
-        inset: 0 !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
         z-index: 2147483647 !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        padding: 22px !important;
+        padding: 20px !important;
         box-sizing: border-box !important;
-        background: rgba(8,10,16,.99) !important;
+        background: rgba(5, 7, 12, 0.995) !important;
         color: #fff !important;
-        font-family: Arial,sans-serif !important;
-        overflow: auto !important;
-        overscroll-behavior: contain !important;
-        isolation: isolate !important;
+        font-family: Arial, sans-serif !important;
+        overflow: hidden !important;
+        backdrop-filter: blur(8px) !important;
       }
 
       #${CONFIG.OVERLAY_ID} .ag-v92-card {
         width: 100% !important;
-        max-width: 470px !important;
+        max-width: 450px !important;
         padding: 30px 24px !important;
         box-sizing: border-box !important;
         text-align: center !important;
         background: #151923 !important;
-        border: 1px solid #a52b38 !important;
-        border-radius: 12px !important;
-        box-shadow: 0 10px 40px rgba(0,0,0,.7) !important;
+        border: 2px solid #ff4757 !important;
+        border-radius: 14px !important;
+        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.9) !important;
       }
 
       #${CONFIG.OVERLAY_ID} h2 {
-        margin: 0 0 16px !important;
+        margin: 0 0 15px !important;
         color: #ff626c !important;
-        font-size: 25px !important;
-        line-height: 1.35 !important;
+        font-size: 24px !important;
+        font-weight: 700 !important;
       }
 
       #${CONFIG.OVERLAY_ID} p {
         color: #d2d5df !important;
         font-size: 15px !important;
-        line-height: 1.7 !important;
+        line-height: 1.6 !important;
+        margin-bottom: 20px !important;
       }
 
       #${CONFIG.OVERLAY_ID} button {
-        margin-top: 12px !important;
-        padding: 13px 20px !important;
+        width: 100% !important;
+        padding: 14px 20px !important;
         border: 0 !important;
-        border-radius: 6px !important;
-        background: #b92f3b !important;
+        border-radius: 8px !important;
+        background: #ff4757 !important;
         color: #fff !important;
         font-weight: bold !important;
-        font-size: 15px !important;
+        font-size: 16px !important;
         cursor: pointer !important;
+        box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4) !important;
       }
     `;
 
