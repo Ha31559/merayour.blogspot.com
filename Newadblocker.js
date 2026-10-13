@@ -16,7 +16,7 @@
     SYSTEM_GRACE: 60000,     // 60 सेकंड सिस्टम ग्रेस पीरियड
     CONFIRMATION_TIME: 2000, // 2 सेकंड की पुष्टि का समय
     RECOVERY_CONFIRMATION_TIME: 5000,
-    CHECK_INTERVAL: 600,     // तेज रफ्तार जांच
+    CHECK_INTERVAL: 500,     // तेज रफ्तार जांच
 
     DETECTION_THRESHOLD: 50, 
 
