@@ -1,24 +1,24 @@
- (function () {
+(function () {
   "use strict";
 
   if (window.__MERAYOUR_ULTIMATE_V92__) return;
   window.__MERAYOUR_ULTIMATE_V92__ = true;
 
   // ==========================================================
-  // MERAYOUR ADGUARD V9.2 - ULTIMATE SHADOW-BAIT & CORE EDITION
+  // MERAYOUR ADGUARD V9.2 - EDGE, OPERA & FIREFOX TARGETED EDITION
   // ==========================================================
 
   const CONFIG = {
     GA4_ID: "G-ML091DD9QZ",
     ADSENSE_ID: "ca-pub-1011806586686442",
 
-    INITIAL_GRACE: 3000,    // 30 सेकंड शुरुआती छूट
-    SYSTEM_GRACE: 6000,     // 60 सेकंड सिस्टम ग्रेस पीरियड
-    CONFIRMATION_TIME: 2000, // 2 सेकंड की पुष्टि का समय
+    INITIAL_GRACE: 20000,    // 20 सेकंड शुरुआती छूट
+    SYSTEM_GRACE: 45000,     // 45 सेकंड सिस्टम ग्रेस पीरियड
+    CONFIRMATION_TIME: 1500, // 1.5 सेकंड पुष्टि का समय
     RECOVERY_CONFIRMATION_TIME: 5000,
-    CHECK_INTERVAL: 200,     // तेज रफ्तार जांच
+    CHECK_INTERVAL: 500,     // और तेज रफ्तार जांच
 
-    DETECTION_THRESHOLD: 50, 
+    DETECTION_THRESHOLD: 40, // थोड़ा और सख्त ताकि तुरंत पकड़ में आए
 
     OVERLAY_ID: "merayour-v92-lock",
     STYLE_ID: "merayour-v92-style",
@@ -46,7 +46,8 @@
     adFilled: false,
     adUnfilled: false,
 
-    baitTriggered: false, // हनीपॉट ट्रैप का स्टेट
+    baitTriggered: false,
+    networkBlocked: false, // नया पैच: नेटवर्क साइलेंट ब्लॉकिंग ट्रैक करने के लिए
 
     suspiciousSince: 0,
     healthySince: 0,
@@ -65,7 +66,7 @@
   };
 
   // ==========================================================
-  // 1. ADVANCED SHADOW DOM BAIT TRAP (नया ताकतवर पैच)
+  // 1. ADVANCED SHADOW DOM BAIT TRAP
   // ==========================================================
   function plantShadowBait() {
     if (document.getElementById("merayour-shadow-host")) return;
@@ -103,14 +104,45 @@
         hostRect.width === 0 ||
         !state.baitHost.isConnected
       ) {
-        return true; // एक्सटेंशन रंगे हाथ पकड़ा गया!
+        return true; 
       }
     } catch (_) {}
     return false;
   }
 
   // ==========================================================
-  // 2. ENVIRONMENT & CORE SCRIPT MONITORING
+  // 2. EDGE, OPERA & FIREFOX TARGETED NETWORK & API SNIFFER (NEW PATCH)
+  // ये ब्राउज़र और एक्सटेंशन साइलेंटली रिक्वेस्ट ब्लॉक करते हैं, इन्हें यहाँ पकड़ेंगे
+  // ==========================================================
+  function watchNetworkBlocks() {
+    try {
+      // Fetch API को हुक करना ताकि अगर कोई एक्सटेंशन गूगल या एनालिटिक्स की कॉल रोके तो पता चले
+      const originalFetch = window.fetch;
+      if (originalFetch) {
+        window.fetch = function (...args) {
+          const url = (args[0] || "").toString().toLowerCase();
+          if (url.includes("google-analytics.com") || url.includes("googlesyndication.com") || url.includes("googletagmanager.com")) {
+            // अगर रिक्वेस्ट करने पर तुरंत फेम या ब्लॉक का रिस्पॉन्स आए या कैंसल हो
+            return originalFetch.apply(this, args).catch(err => {
+              state.networkBlocked = true;
+              throw err;
+            });
+          }
+          return originalFetch.apply(this, args);
+        };
+      }
+    } catch (_) {}
+
+    // ग्लोबल एडसेंस और विज्ञापन ऑब्जेक्ट्स की ताक-झांक (Edge/Firefox एक्सटेंशन इन्हें मॉडिफाई कर देते हैं)
+    try {
+      if (window.adsbygoogle && typeof window.adsbygoogle.loaded === "undefined" && navigator.userAgent.indexOf("Firefox") !== -1) {
+        state.networkBlocked = true;
+      }
+    } catch (_) {}
+  }
+
+  // ==========================================================
+  // 3. ENVIRONMENT & CORE SCRIPT MONITORING (पुराना लॉजिक सुरक्षित)
   // ==========================================================
   function isBloggerPreview() {
     const host = (location.hostname || "").toLowerCase();
@@ -195,16 +227,17 @@
   }
 
   // ==========================================================
-  // 3. CORE EVIDENCE & CONTENT DETACHMENT ENGINE
+  // 4. CORE EVIDENCE & CONTENT DETACHMENT ENGINE
   // ==========================================================
   function calculateEvidence() {
     const elapsed = Date.now() - startedAt;
     let gaScore = 0;
     let adScore = 0;
 
-    if (checkShadowBaitTrap()) {
+    // शैडो हनीपॉट या नेटवर्क साइलेंट ब्लॉकिंग (Edge/Firefox/Opera के लिए) पकड़े जाने पर
+    if (checkShadowBaitTrap() || state.networkBlocked) {
       state.baitTriggered = true;
-      gaScore = 100; // शैडो हनीपॉट ने पकड़ लिया तो सीधा मैक्सिमम स्कोर
+      gaScore = 100; 
     }
 
     if (state.gaScriptFailed) gaScore = Math.max(gaScore, CONFIG.GA_SCRIPT_FAILURE || 50);
@@ -308,7 +341,7 @@
   }
 
   // ==========================================================
-  // 4. OVERLAY STYLES & FORCE LOCK
+  // 5. OVERLAY STYLES & FORCE LOCK
   // ==========================================================
   function installStyles() {
     if (document.getElementById(CONFIG.STYLE_ID)) return;
@@ -441,7 +474,7 @@
   }
 
   // ==========================================================
-  // 5. MAIN EVALUATION LOOP
+  // 6. MAIN EVALUATION LOOP
   // ==========================================================
   function evaluate() {
     const evidence = calculateEvidence();
@@ -471,6 +504,7 @@
 
   function init() {
     plantShadowBait();
+    watchNetworkBlocks(); // नया पैच एक्टिव किया गया
     watchScripts();
     state.timer = window.setInterval(evaluate, CONFIG.CHECK_INTERVAL);
     evaluate();
